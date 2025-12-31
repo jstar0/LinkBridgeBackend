@@ -479,6 +479,10 @@ func (api *v1API) handleCreateMessage(w http.ResponseWriter, r *http.Request, se
 			writeAPIError(w, ErrCodeSessionAccessDenied, "access denied")
 			return
 		}
+		if errors.Is(err, storage.ErrSessionArchived) {
+			writeAPIError(w, ErrCodeSessionArchived, "session is archived")
+			return
+		}
 		api.logger.Error("create message failed", "error", err)
 		writeAPIError(w, ErrCodeInternal, "internal error")
 		return

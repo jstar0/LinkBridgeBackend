@@ -41,7 +41,8 @@ func main() {
 	}
 
 	tokenValidator := &storeTokenValidator{store: store}
-	wsManager := ws.NewManager(logger, tokenValidator)
+	callStore := &storeCallStore{store: store}
+	wsManager := ws.NewManager(logger, tokenValidator, callStore)
 	handler := httpserver.NewHandler(logger, store, wsManager, cfg.UploadDir, httpserver.HandlerOptions{
 		WeChatAppID:                   cfg.WeChatAppID,
 		WeChatAppSecret:               cfg.WeChatAppSecret,
@@ -100,4 +101,16 @@ func (v *storeTokenValidator) ValidateToken(ctx context.Context, token string) (
 		return "", err
 	}
 	return authToken.UserID, nil
+}
+
+type storeCallStore struct {
+	store *storage.Store
+}
+
+func (s *storeCallStore) GetCallByID(ctx context.Context, callID string) (callerID, calleeID, status string, err error) {
+	call, err := s.store.GetCallByID(ctx, callID)
+	if err != nil {
+		return "", "", "", err
+	}
+	return call.CallerID, call.CalleeID, call.Status, nil
 }

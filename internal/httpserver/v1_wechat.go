@@ -35,12 +35,12 @@ func (api *v1API) handleWeChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if len(parts) == 2 && parts[0] == "qrcode" && parts[1] == "friend" {
+	if len(parts) == 2 && parts[0] == "qrcode" && parts[1] == "session" {
 		if r.Method != http.MethodGet {
 			writeAPIError(w, ErrCodeMethodNotAllowed, "method not allowed")
 			return
 		}
-		api.handleWeChatFriendQRCode(w, r)
+		api.handleWeChatSessionQRCode(w, r)
 		return
 	}
 
@@ -89,7 +89,7 @@ func (api *v1API) handleWeChatBind(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, bindWeChatResponse{Bound: true})
 }
 
-func (api *v1API) handleWeChatFriendQRCode(w http.ResponseWriter, r *http.Request) {
+func (api *v1API) handleWeChatSessionQRCode(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r.Context())
 	if userID == "" {
 		writeAPIError(w, ErrCodeTokenInvalid, "authentication required")
@@ -101,9 +101,9 @@ func (api *v1API) handleWeChatFriendQRCode(w http.ResponseWriter, r *http.Reques
 	}
 
 	nowMs := time.Now().UnixMilli()
-	invite, _, err := api.store.GetOrCreateFriendInvite(r.Context(), userID, nowMs)
+	invite, _, err := api.store.GetOrCreateSessionInvite(r.Context(), userID, nowMs)
 	if err != nil {
-		api.logger.Error("create friend invite failed", "error", err)
+		api.logger.Error("create session invite failed", "error", err)
 		writeAPIError(w, ErrCodeInternal, "internal error")
 		return
 	}

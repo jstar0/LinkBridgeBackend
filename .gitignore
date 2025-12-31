@@ -37,3 +37,6 @@ uploads/
 .env
 .env.local
 .env.*.local
+linkbridge-api-linux
+linkbridge-backend
+linkbridge-api

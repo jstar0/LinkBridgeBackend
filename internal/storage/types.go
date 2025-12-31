@@ -29,25 +29,26 @@ const (
 )
 
 const (
-	FriendRequestStatusPending  = "pending"
-	FriendRequestStatusAccepted = "accepted"
-	FriendRequestStatusRejected = "rejected"
-	FriendRequestStatusCanceled = "canceled"
+	SessionRequestStatusPending  = "pending"
+	SessionRequestStatusAccepted = "accepted"
+	SessionRequestStatusRejected = "rejected"
+	SessionRequestStatusCanceled = "canceled"
 )
 
 var (
-	ErrNotFound       = errors.New("not found")
-	ErrUsernameExists = errors.New("username exists")
-	ErrCannotChatSelf = errors.New("cannot chat self")
-	ErrSessionExists  = errors.New("session exists")
-	ErrAccessDenied   = errors.New("access denied")
-	ErrTokenInvalid   = errors.New("token invalid")
-	ErrTokenExpired   = errors.New("token expired")
-	ErrInvalidState   = errors.New("invalid state")
-	ErrWeChatNotBound = errors.New("wechat not bound")
-	ErrAlreadyFriends = errors.New("already friends")
-	ErrRequestExists  = errors.New("friend request exists")
-	ErrInviteInvalid  = errors.New("friend invite invalid")
+	ErrNotFound        = errors.New("not found")
+	ErrUsernameExists  = errors.New("username exists")
+	ErrCannotChatSelf  = errors.New("cannot chat self")
+	ErrSessionExists   = errors.New("session exists")
+	ErrSessionNotFound = errors.New("session not found")
+	ErrAccessDenied    = errors.New("access denied")
+	ErrTokenInvalid    = errors.New("token invalid")
+	ErrTokenExpired    = errors.New("token expired")
+	ErrInvalidState    = errors.New("invalid state")
+	ErrWeChatNotBound  = errors.New("wechat not bound")
+	ErrRequestExists   = errors.New("session request exists")
+	ErrInviteInvalid   = errors.New("session invite invalid")
+	ErrSessionArchived = errors.New("session archived")
 )
 
 type UserRow struct {
@@ -109,7 +110,7 @@ type WeChatBindingRow struct {
 	UpdatedAtMs int64
 }
 
-type FriendRequestRow struct {
+type SessionRequestRow struct {
 	ID          string
 	RequesterID string
 	AddresseeID string
@@ -118,7 +119,7 @@ type FriendRequestRow struct {
 	UpdatedAtMs int64
 }
 
-type FriendInviteRow struct {
+type SessionInviteRow struct {
 	Code        string
 	InviterID   string
 	CreatedAtMs int64

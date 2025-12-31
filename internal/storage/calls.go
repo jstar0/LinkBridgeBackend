@@ -19,6 +19,15 @@ func (s *Store) CreateCall(ctx context.Context, callerID, calleeID, mediaType, g
 		return CallRow{}, ErrCannotChatSelf
 	}
 
+	// Check for active session between caller and callee
+	session, err := s.getSessionByParticipants(ctx, callerID, calleeID)
+	if err != nil {
+		return CallRow{}, ErrSessionNotFound
+	}
+	if session.Status == SessionStatusArchived {
+		return CallRow{}, ErrSessionArchived
+	}
+
 	callID := uuid.NewString()
 	call := CallRow{
 		ID:          callID,

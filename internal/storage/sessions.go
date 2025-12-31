@@ -208,3 +208,58 @@ func (s *Store) GetPeerUserID(session SessionRow, currentUserID string) string {
 	}
 	return session.User1ID
 }
+
+func (s *Store) getSessionByParticipants(ctx context.Context, user1ID, user2ID string) (SessionRow, error) {
+	hash := computeParticipantsHash(user1ID, user2ID)
+	return s.getSessionByHash(ctx, hash)
+}
+
+func createSessionInTx(ctx context.Context, tx *sql.Tx, driver, user1ID, user2ID string, nowMs int64) (SessionRow, error) {
+	hash := computeParticipantsHash(user1ID, user2ID)
+
+	// Check if session already exists
+	selectQ := rebindQuery(driver, `SELECT id, participants_hash, user1_id, user2_id, status, last_message_text, last_message_at_ms, created_at_ms, updated_at_ms
+		FROM sessions WHERE participants_hash = ?;`)
+	var existing SessionRow
+	var lastText sql.NullString
+	var lastAtMs sql.NullInt64
+	if err := tx.QueryRowContext(ctx, selectQ, hash).Scan(
+		&existing.ID, &existing.ParticipantsHash, &existing.User1ID, &existing.User2ID,
+		&existing.Status, &lastText, &lastAtMs, &existing.CreatedAtMs, &existing.UpdatedAtMs,
+	); err == nil {
+		if lastText.Valid {
+			existing.LastMessageText = &lastText.String
+		}
+		if lastAtMs.Valid {
+			existing.LastMessageAtMs = &lastAtMs.Int64
+		}
+		return existing, ErrSessionExists
+	} else if err != sql.ErrNoRows {
+		return SessionRow{}, err
+	}
+
+	ids := []string{user1ID, user2ID}
+	sort.Strings(ids)
+
+	sessionID := uuid.NewString()
+	session := SessionRow{
+		ID:               sessionID,
+		ParticipantsHash: hash,
+		User1ID:          ids[0],
+		User2ID:          ids[1],
+		Status:           SessionStatusActive,
+		CreatedAtMs:      nowMs,
+		UpdatedAtMs:      nowMs,
+	}
+
+	insertQ := rebindQuery(driver, `INSERT INTO sessions (id, participants_hash, user1_id, user2_id, status, created_at_ms, updated_at_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?);`)
+	if _, err := tx.ExecContext(ctx, insertQ,
+		session.ID, session.ParticipantsHash, session.User1ID, session.User2ID,
+		session.Status, nowMs, nowMs,
+	); err != nil {
+		return SessionRow{}, err
+	}
+
+	return session, nil
+}

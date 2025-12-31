@@ -43,16 +43,14 @@ type Store interface {
 	UpsertWeChatBinding(ctx context.Context, userID, openID, sessionKey string, unionID *string, nowMs int64) (storage.WeChatBindingRow, error)
 	GetWeChatBindingByUserID(ctx context.Context, userID string) (storage.WeChatBindingRow, error)
 
-	AreFriends(ctx context.Context, userID, peerUserID string) (bool, error)
-	ListFriends(ctx context.Context, userID string) ([]storage.UserRow, error)
-	CreateFriendRequest(ctx context.Context, requesterID, addresseeID string, nowMs int64) (storage.FriendRequestRow, bool, error)
-	ListFriendRequests(ctx context.Context, userID, box, status string) ([]storage.FriendRequestRow, error)
-	AcceptFriendRequest(ctx context.Context, requestID, userID string, nowMs int64) (storage.FriendRequestRow, error)
-	RejectFriendRequest(ctx context.Context, requestID, userID string, nowMs int64) (storage.FriendRequestRow, error)
-	CancelFriendRequest(ctx context.Context, requestID, userID string, nowMs int64) (storage.FriendRequestRow, error)
+	CreateSessionRequest(ctx context.Context, requesterID, addresseeID string, nowMs int64) (storage.SessionRequestRow, bool, error)
+	ListSessionRequests(ctx context.Context, userID, box, status string) ([]storage.SessionRequestRow, error)
+	AcceptSessionRequest(ctx context.Context, requestID, userID string, nowMs int64) (storage.SessionRequestRow, *storage.SessionRow, error)
+	RejectSessionRequest(ctx context.Context, requestID, userID string, nowMs int64) (storage.SessionRequestRow, error)
+	CancelSessionRequest(ctx context.Context, requestID, userID string, nowMs int64) (storage.SessionRequestRow, error)
 
-	GetOrCreateFriendInvite(ctx context.Context, inviterID string, nowMs int64) (storage.FriendInviteRow, bool, error)
-	ResolveFriendInvite(ctx context.Context, code string) (storage.FriendInviteRow, error)
+	GetOrCreateSessionInvite(ctx context.Context, inviterID string, nowMs int64) (storage.SessionInviteRow, bool, error)
+	ResolveSessionInvite(ctx context.Context, code string) (storage.SessionInviteRow, error)
 }
 
 type HandlerOptions struct {
@@ -99,8 +97,8 @@ func NewHandler(logger *slog.Logger, store Store, wsManager *ws.Manager, uploadD
 	mux.HandleFunc("/v1/calls", api.handleCalls)
 	mux.HandleFunc("/v1/calls/", api.handleCallSubroutes)
 	mux.HandleFunc("/v1/wechat/", api.handleWeChat)
-	mux.HandleFunc("/v1/friends", api.handleFriends)
-	mux.HandleFunc("/v1/friends/", api.handleFriendSubroutes)
+	mux.HandleFunc("/v1/session-requests", api.handleSessionRequests)
+	mux.HandleFunc("/v1/session-requests/", api.handleSessionRequestSubroutes)
 	mux.HandleFunc("/v1/upload", api.handleUpload)
 
 	// Serve uploaded files

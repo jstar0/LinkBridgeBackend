@@ -84,7 +84,7 @@ func initSchema(ctx context.Context, db *sql.DB) error {
 		);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_wechat_bindings_openid ON wechat_bindings(openid);`,
 
-		`CREATE TABLE IF NOT EXISTS friend_requests (
+		`CREATE TABLE IF NOT EXISTS session_requests (
 			id TEXT PRIMARY KEY,
 			requester_id TEXT NOT NULL,
 			addressee_id TEXT NOT NULL,
@@ -94,28 +94,18 @@ func initSchema(ctx context.Context, db *sql.DB) error {
 			FOREIGN KEY(requester_id) REFERENCES users(id) ON DELETE CASCADE,
 			FOREIGN KEY(addressee_id) REFERENCES users(id) ON DELETE CASCADE
 		);`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_requests_pair ON friend_requests(requester_id, addressee_id);`,
-		`CREATE INDEX IF NOT EXISTS idx_friend_requests_addressee_status ON friend_requests(addressee_id, status, updated_at_ms);`,
-		`CREATE INDEX IF NOT EXISTS idx_friend_requests_requester_status ON friend_requests(requester_id, status, updated_at_ms);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_requests_pair ON session_requests(requester_id, addressee_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_session_requests_addressee_status ON session_requests(addressee_id, status, updated_at_ms);`,
+		`CREATE INDEX IF NOT EXISTS idx_session_requests_requester_status ON session_requests(requester_id, status, updated_at_ms);`,
 
-		`CREATE TABLE IF NOT EXISTS friends (
-			user_id TEXT NOT NULL,
-			friend_id TEXT NOT NULL,
-			created_at_ms BIGINT NOT NULL,
-			PRIMARY KEY(user_id, friend_id),
-			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-			FOREIGN KEY(friend_id) REFERENCES users(id) ON DELETE CASCADE
-		);`,
-		`CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id, created_at_ms);`,
-
-		`CREATE TABLE IF NOT EXISTS friend_invites (
+		`CREATE TABLE IF NOT EXISTS session_invites (
 			code TEXT PRIMARY KEY,
 			inviter_id TEXT NOT NULL UNIQUE,
 			created_at_ms BIGINT NOT NULL,
 			updated_at_ms BIGINT NOT NULL,
 			FOREIGN KEY(inviter_id) REFERENCES users(id) ON DELETE CASCADE
 		);`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_invites_inviter ON friend_invites(inviter_id);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_invites_inviter ON session_invites(inviter_id);`,
 	}
 
 	for _, stmt := range stmts {

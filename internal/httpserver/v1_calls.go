@@ -172,6 +172,14 @@ func (api *v1API) handleCreateCall(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, ErrCodeValidation, "cannot call self")
 			return
 		}
+		if errors.Is(err, storage.ErrSessionNotFound) {
+			writeAPIError(w, ErrCodeSessionNotFound, "no active session with this user")
+			return
+		}
+		if errors.Is(err, storage.ErrSessionArchived) {
+			writeAPIError(w, ErrCodeSessionArchived, "session is archived")
+			return
+		}
 		api.logger.Error("create call failed", "error", err)
 		writeAPIError(w, ErrCodeInternal, "internal error")
 		return

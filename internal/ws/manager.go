@@ -28,8 +28,23 @@ type Envelope struct {
 	Payload   any    `json:"payload"`
 }
 
+type AudioFrame struct {
+	CallID string `json:"callId"`
+	Data   string `json:"data"` // base64 encoded audio
+}
+
+type IncomingMessage struct {
+	Type    string     `json:"type"`
+	Audio   AudioFrame `json:"audio,omitempty"`
+	Payload any        `json:"payload,omitempty"`
+}
+
 type TokenValidator interface {
 	ValidateToken(ctx context.Context, token string) (userID string, err error)
+}
+
+type CallStore interface {
+	GetCallByID(ctx context.Context, callID string) (callerID, calleeID, status string, err error)
 }
 
 type client struct {
@@ -49,15 +64,17 @@ func (c *client) close() {
 type Manager struct {
 	logger         *slog.Logger
 	tokenValidator TokenValidator
+	callStore      CallStore
 
 	mu      sync.Mutex
 	clients map[*client]struct{}
 }
 
-func NewManager(logger *slog.Logger, tokenValidator TokenValidator) *Manager {
+func NewManager(logger *slog.Logger, tokenValidator TokenValidator, callStore CallStore) *Manager {
 	return &Manager{
 		logger:         logger.With("component", "ws"),
 		tokenValidator: tokenValidator,
+		callStore:      callStore,
 		clients:        make(map[*client]struct{}),
 	}
 }
@@ -203,11 +220,12 @@ func (m *Manager) handle(w http.ResponseWriter, r *http.Request) {
 	go m.writePump(c, r.RemoteAddr)
 
 	for {
-		_, _, err := conn.ReadMessage()
+		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			m.logger.Info("ws disconnected", "remoteAddr", r.RemoteAddr, "userID", userID, "error", err)
 			return
 		}
+		m.handleClientMessage(c, msg)
 	}
 }
 
@@ -281,4 +299,67 @@ func encodeJSON(v any) ([]byte, error) {
 		return nil, err
 	}
 	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+}
+
+type clientMessage struct {
+	Type   string `json:"type"`
+	CallID string `json:"callId"`
+	Data   string `json:"data"`
+}
+
+func (m *Manager) handleClientMessage(c *client, msg []byte) {
+	var cm clientMessage
+	if err := json.Unmarshal(msg, &cm); err != nil {
+		return
+	}
+
+	if cm.Type != "audio.frame" {
+		return
+	}
+
+	if cm.CallID == "" || cm.Data == "" {
+		return
+	}
+
+	callerID, calleeID, status, err := m.callStore.GetCallByID(context.Background(), cm.CallID)
+	if err != nil {
+		return
+	}
+
+	if status != "accepted" {
+		return
+	}
+
+	var peerID string
+	if c.userID == callerID {
+		peerID = calleeID
+	} else if c.userID == calleeID {
+		peerID = callerID
+	} else {
+		return
+	}
+
+	env := Envelope{
+		Type: "audio.frame",
+		Payload: map[string]string{
+			"callId": cm.CallID,
+			"data":   cm.Data,
+		},
+	}
+
+	b, err := encodeJSON(env)
+	if err != nil {
+		return
+	}
+
+	clients := m.snapshotClients()
+	for _, peer := range clients {
+		if peer.userID != peerID {
+			continue
+		}
+		select {
+		case peer.send <- b:
+		default:
+		}
+	}
 }

@@ -103,12 +103,15 @@ func (s *Store) CreateMessage(ctx context.Context, sessionID, senderID, msgType 
 		return MessageRow{}, fmt.Errorf("db not initialized")
 	}
 
-	isParticipant, err := s.IsSessionParticipant(ctx, sessionID, senderID)
+	session, err := s.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		return MessageRow{}, err
 	}
-	if !isParticipant {
+	if session.User1ID != senderID && session.User2ID != senderID {
 		return MessageRow{}, ErrAccessDenied
+	}
+	if session.Status == SessionStatusArchived {
+		return MessageRow{}, ErrSessionArchived
 	}
 
 	metaJSON, err := marshalMeta(meta)
