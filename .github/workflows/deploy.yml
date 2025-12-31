@@ -12,8 +12,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
@@ -22,45 +21,12 @@ jobs:
         with:
           go-version: '1.23'
 
-      - name: Build
-        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o linkbridge-backend ./cmd/api
-
-      - name: Deploy
-        env:
-          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
+      - name: Build and Deploy
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/key
-          chmod 600 ~/.ssh/key
-
-          # SSH config for slow connections
-          cat >> ~/.ssh/config << EOF
-          Host deploy
-            HostName $SERVER_HOST
-            User $SERVER_USER
-            IdentityFile ~/.ssh/key
-            StrictHostKeyChecking no
-            ConnectTimeout 120
-            ServerAliveInterval 30
-            ServerAliveCountMax 5
-          EOF
-
-          # Upload with retry
-          for i in 1 2 3; do
-            echo "Upload attempt $i..."
-            scp -F ~/.ssh/config linkbridge-backend deploy:/tmp/linkbridge-backend && break
-            sleep 10
-          done
-
-          # Deploy
-          ssh -F ~/.ssh/config deploy << 'DEPLOY'
-          set -e
-          systemctl stop linkbridge || true
-          mv /tmp/linkbridge-backend /opt/linkbridge-backend
-          chmod +x /opt/linkbridge-backend
-          systemctl start linkbridge
+          CGO_ENABLED=0 go build -o /tmp/linkbridge-backend ./cmd/api
+          sudo systemctl stop linkbridge || true
+          sudo mv /tmp/linkbridge-backend /opt/linkbridge-backend
+          sudo chmod +x /opt/linkbridge-backend
+          sudo systemctl start linkbridge
           sleep 2
-          systemctl status linkbridge --no-pager
-          DEPLOY
+          sudo systemctl status linkbridge --no-pager
