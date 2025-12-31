@@ -11,22 +11,38 @@ on:
       - 'go.sum'
 
 jobs:
-  deploy:
-    runs-on: self-hosted
-    env:
-      PATH: /usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      GOPROXY: https://proxy.golang.com.cn,direct
+  build:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      - name: Build and Deploy
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o linkbridge-backend ./cmd/api
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkbridge-backend
+          path: linkbridge-backend
+
+  deploy:
+    needs: build
+    runs-on: self-hosted
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linkbridge-backend
+
+      - name: Deploy
         run: |
-          go version
-          CGO_ENABLED=0 go build -o /tmp/linkbridge-backend ./cmd/api
           sudo systemctl stop linkbridge || true
-          sudo mv /tmp/linkbridge-backend /opt/linkbridge-backend
+          sudo mv linkbridge-backend /opt/linkbridge-backend
           sudo chmod +x /opt/linkbridge-backend
           sudo systemctl start linkbridge
           sleep 2
