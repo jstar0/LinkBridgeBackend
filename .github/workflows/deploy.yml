@@ -15,7 +15,7 @@ jobs:
     runs-on: self-hosted
     env:
       PATH: /usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      GOPROXY: https://goproxy.cn,direct
+      GOPROXY: https://proxy.golang.com.cn,direct
     steps:
       - uses: actions/checkout@v4
         with:
