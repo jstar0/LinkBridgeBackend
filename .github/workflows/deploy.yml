@@ -11,7 +11,7 @@ on:
       - 'go.sum'
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,26 +24,23 @@ jobs:
       - name: Build
         run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o linkbridge-backend ./cmd/api
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linkbridge-backend
-          path: linkbridge-backend
-
-  deploy:
-    needs: build
-    runs-on: self-hosted
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: linkbridge-backend
-
-      - name: Deploy
+      - name: Deploy via SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          sudo systemctl stop linkbridge || true
-          sudo mv linkbridge-backend /opt/linkbridge-backend
-          sudo chmod +x /opt/linkbridge-backend
-          sudo systemctl start linkbridge
-          sleep 2
-          sudo systemctl status linkbridge --no-pager
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null
+
+          scp -i ~/.ssh/deploy_key linkbridge-backend $SERVER_USER@$SERVER_HOST:/tmp/linkbridge-backend
+          ssh -i ~/.ssh/deploy_key $SERVER_USER@$SERVER_HOST '
+            systemctl stop linkbridge || true
+            mv /tmp/linkbridge-backend /opt/linkbridge-backend
+            chmod +x /opt/linkbridge-backend
+            systemctl start linkbridge
+            sleep 2
+            systemctl status linkbridge --no-pager
+          '
