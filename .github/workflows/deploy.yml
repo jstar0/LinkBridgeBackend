@@ -30,13 +30,14 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
+          set -x
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null
+          echo "$SERVER_HOST" | ssh-keyscan -t ed25519 -f - >> ~/.ssh/known_hosts 2>&1 || true
 
-          scp -i ~/.ssh/deploy_key linkbridge-backend $SERVER_USER@$SERVER_HOST:/tmp/linkbridge-backend
-          ssh -i ~/.ssh/deploy_key $SERVER_USER@$SERVER_HOST '
+          scp -v -o ConnectTimeout=30 -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key linkbridge-backend $SERVER_USER@$SERVER_HOST:/tmp/linkbridge-backend
+          ssh -v -o ConnectTimeout=30 -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key $SERVER_USER@$SERVER_HOST '
             systemctl stop linkbridge || true
             mv /tmp/linkbridge-backend /opt/linkbridge-backend
             chmod +x /opt/linkbridge-backend
