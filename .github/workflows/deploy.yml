@@ -13,16 +13,15 @@ on:
 jobs:
   deploy:
     runs-on: self-hosted
+    env:
+      PATH: /usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      GOPROXY: https://goproxy.cn,direct
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
       - name: Build and Deploy
         run: |
+          go version
           CGO_ENABLED=0 go build -o /tmp/linkbridge-backend ./cmd/api
           sudo systemctl stop linkbridge || true
           sudo mv /tmp/linkbridge-backend /opt/linkbridge-backend
