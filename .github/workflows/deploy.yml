@@ -18,6 +18,8 @@ jobs:
       GOPROXY: https://goproxy.cn,direct
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Build and Deploy
         run: |
