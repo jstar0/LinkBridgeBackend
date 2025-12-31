@@ -22,7 +22,7 @@ jobs:
       - name: Build and Deploy
         run: |
           go version
-          CGO_ENABLED=0 go build -o /tmp/linkbridge-backend ./cmd/api
+          CGO_ENABLED=0 go build -mod=vendor -o /tmp/linkbridge-backend ./cmd/api
           sudo systemctl stop linkbridge || true
           sudo mv /tmp/linkbridge-backend /opt/linkbridge-backend
           sudo chmod +x /opt/linkbridge-backend
