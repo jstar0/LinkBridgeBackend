@@ -1,16 +1,21 @@
 package httpserver
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"log/slog"
 
 	"linkbridge-backend/internal/storage"
+	"linkbridge-backend/internal/wechat"
 	"linkbridge-backend/internal/ws"
 )
 
@@ -19,14 +24,27 @@ type v1API struct {
 	store     Store
 	wsManager *ws.Manager
 	uploadDir string
+
+	wechatClient                  *wechat.Client
+	wechatAppID                   string
+	wechatCallSubscribeTemplateID string
+	wechatCallSubscribePage       string
 }
 
-func newV1API(logger *slog.Logger, store Store, wsManager *ws.Manager, uploadDir string) *v1API {
+func newV1API(logger *slog.Logger, store Store, wsManager *ws.Manager, uploadDir string, opts HandlerOptions) *v1API {
+	var wc *wechat.Client
+	if strings.TrimSpace(opts.WeChatAppID) != "" && strings.TrimSpace(opts.WeChatAppSecret) != "" {
+		wc = wechat.NewClient(logger, opts.WeChatAppID, opts.WeChatAppSecret)
+	}
 	return &v1API{
-		logger:    logger.With("component", "v1"),
-		store:     store,
-		wsManager: wsManager,
-		uploadDir: uploadDir,
+		logger:                        logger.With("component", "v1"),
+		store:                         store,
+		wsManager:                     wsManager,
+		uploadDir:                     uploadDir,
+		wechatClient:                  wc,
+		wechatAppID:                   strings.TrimSpace(opts.WeChatAppID),
+		wechatCallSubscribeTemplateID: strings.TrimSpace(opts.WeChatCallSubscribeTemplateID),
+		wechatCallSubscribePage:       strings.TrimSpace(opts.WeChatCallSubscribePage),
 	}
 }
 
@@ -125,12 +143,12 @@ type peerItem struct {
 }
 
 type sessionListItem struct {
-	ID              string    `json:"id"`
-	Peer            peerItem  `json:"peer"`
-	Status          string    `json:"status"`
-	LastMessageText *string   `json:"lastMessageText,omitempty"`
-	LastMessageAtMs *int64    `json:"lastMessageAtMs,omitempty"`
-	UpdatedAtMs     int64     `json:"updatedAtMs"`
+	ID              string   `json:"id"`
+	Peer            peerItem `json:"peer"`
+	Status          string   `json:"status"`
+	LastMessageText *string  `json:"lastMessageText,omitempty"`
+	LastMessageAtMs *int64   `json:"lastMessageAtMs,omitempty"`
+	UpdatedAtMs     int64    `json:"updatedAtMs"`
 }
 
 type listSessionsResponse struct {
@@ -511,4 +529,41 @@ func (api *v1API) broadcast(env ws.Envelope) {
 		return
 	}
 	api.wsManager.Broadcast(env)
+}
+
+func (api *v1API) sendToUser(userID string, env ws.Envelope) {
+	if api.wsManager == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	api.wsManager.SendToUser(userID, env)
+}
+
+func (api *v1API) sendToUsers(userIDs []string, env ws.Envelope) {
+	if api.wsManager == nil || len(userIDs) == 0 {
+		return
+	}
+	api.wsManager.SendToUsers(userIDs, env)
+}
+
+type wechatVoipSignResponse struct {
+	GroupID   string `json:"groupId"`
+	NonceStr  string `json:"nonceStr"`
+	TimeStamp int64  `json:"timeStamp"`
+	Signature string `json:"signature"`
+	RoomType  string `json:"roomType"`
+}
+
+func computeVoipSignature(appID, groupID, nonceStr string, timeStamp int64, sessionKey string) string {
+	parts := []string{
+		strings.TrimSpace(appID),
+		strings.TrimSpace(groupID),
+		strings.TrimSpace(nonceStr),
+		fmt.Sprintf("%d", timeStamp),
+	}
+	sort.Strings(parts)
+	msg := strings.Join(parts, "")
+
+	mac := hmac.New(sha256.New, []byte(sessionKey))
+	_, _ = mac.Write([]byte(msg))
+	return fmt.Sprintf("%x", mac.Sum(nil))
 }

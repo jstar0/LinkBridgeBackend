@@ -57,6 +57,65 @@ func initSchema(ctx context.Context, db *sql.DB) error {
 			FOREIGN KEY(sender_id) REFERENCES users(id)
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_session_created_at_ms ON messages(session_id, created_at_ms);`,
+
+		`CREATE TABLE IF NOT EXISTS calls (
+			id TEXT PRIMARY KEY,
+			group_id TEXT NOT NULL,
+			caller_id TEXT NOT NULL,
+			callee_id TEXT NOT NULL,
+			media_type TEXT NOT NULL,
+			status TEXT NOT NULL,
+			created_at_ms BIGINT NOT NULL,
+			updated_at_ms BIGINT NOT NULL,
+			FOREIGN KEY(caller_id) REFERENCES users(id),
+			FOREIGN KEY(callee_id) REFERENCES users(id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_calls_caller ON calls(caller_id, updated_at_ms);`,
+		`CREATE INDEX IF NOT EXISTS idx_calls_callee ON calls(callee_id, updated_at_ms);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_calls_group_id ON calls(group_id);`,
+
+		`CREATE TABLE IF NOT EXISTS wechat_bindings (
+			user_id TEXT PRIMARY KEY,
+			openid TEXT NOT NULL UNIQUE,
+			session_key TEXT NOT NULL,
+			unionid TEXT,
+			updated_at_ms BIGINT NOT NULL,
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_wechat_bindings_openid ON wechat_bindings(openid);`,
+
+		`CREATE TABLE IF NOT EXISTS friend_requests (
+			id TEXT PRIMARY KEY,
+			requester_id TEXT NOT NULL,
+			addressee_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			created_at_ms BIGINT NOT NULL,
+			updated_at_ms BIGINT NOT NULL,
+			FOREIGN KEY(requester_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY(addressee_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_requests_pair ON friend_requests(requester_id, addressee_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_friend_requests_addressee_status ON friend_requests(addressee_id, status, updated_at_ms);`,
+		`CREATE INDEX IF NOT EXISTS idx_friend_requests_requester_status ON friend_requests(requester_id, status, updated_at_ms);`,
+
+		`CREATE TABLE IF NOT EXISTS friends (
+			user_id TEXT NOT NULL,
+			friend_id TEXT NOT NULL,
+			created_at_ms BIGINT NOT NULL,
+			PRIMARY KEY(user_id, friend_id),
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY(friend_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id, created_at_ms);`,
+
+		`CREATE TABLE IF NOT EXISTS friend_invites (
+			code TEXT PRIMARY KEY,
+			inviter_id TEXT NOT NULL UNIQUE,
+			created_at_ms BIGINT NOT NULL,
+			updated_at_ms BIGINT NOT NULL,
+			FOREIGN KEY(inviter_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_invites_inviter ON friend_invites(inviter_id);`,
 	}
 
 	for _, stmt := range stmts {

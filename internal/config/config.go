@@ -11,6 +11,11 @@ type Config struct {
 	DatabaseURL string
 	LogLevel    string
 	UploadDir   string
+
+	WeChatAppID                 string
+	WeChatAppSecret             string
+	WeChatCallSubscribeTemplateID string
+	WeChatCallSubscribePage       string
 }
 
 func Load() (Config, error) {
@@ -19,6 +24,11 @@ func Load() (Config, error) {
 		DatabaseURL: getEnv("DATABASE_URL", "sqlite::memory:"),
 		LogLevel:    strings.TrimSpace(getEnv("LOG_LEVEL", "info")),
 		UploadDir:   getEnv("UPLOAD_DIR", "./uploads"),
+
+		WeChatAppID:                   strings.TrimSpace(getEnv("WECHAT_APPID", "")),
+		WeChatAppSecret:               strings.TrimSpace(getEnv("WECHAT_APPSECRET", "")),
+		WeChatCallSubscribeTemplateID: strings.TrimSpace(getEnv("WECHAT_CALL_SUBSCRIBE_TEMPLATE_ID", "")),
+		WeChatCallSubscribePage:       strings.TrimSpace(getEnv("WECHAT_CALL_SUBSCRIBE_PAGE", "pages/linkbridge/call/call")),
 	}
 
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {

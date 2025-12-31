@@ -1,7 +1,9 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http/httptest"
@@ -12,14 +14,23 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type staticValidator struct{}
+
+func (staticValidator) ValidateToken(ctx context.Context, token string) (string, error) {
+	if token == "" {
+		return "", errors.New("missing token")
+	}
+	return "test-user", nil
+}
+
 func TestManager_Broadcast(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	manager := NewManager(logger)
+	manager := NewManager(logger, staticValidator{})
 
 	srv := httptest.NewServer(manager.Handler())
 	defer srv.Close()
 
-	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "?token=test"
 
 	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {

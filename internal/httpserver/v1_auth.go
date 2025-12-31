@@ -263,5 +263,12 @@ func extractToken(r *http.Request) string {
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
 	}
+
+	// Allow token via query param for endpoints used by <image> tags, where setting headers is awkward.
+	if r != nil {
+		if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+			return token
+		}
+	}
 	return ""
 }

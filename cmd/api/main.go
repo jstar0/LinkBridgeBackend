@@ -42,7 +42,12 @@ func main() {
 
 	tokenValidator := &storeTokenValidator{store: store}
 	wsManager := ws.NewManager(logger, tokenValidator)
-	handler := httpserver.NewHandler(logger, store, wsManager, cfg.UploadDir)
+	handler := httpserver.NewHandler(logger, store, wsManager, cfg.UploadDir, httpserver.HandlerOptions{
+		WeChatAppID:                   cfg.WeChatAppID,
+		WeChatAppSecret:               cfg.WeChatAppSecret,
+		WeChatCallSubscribeTemplateID: cfg.WeChatCallSubscribeTemplateID,
+		WeChatCallSubscribePage:       cfg.WeChatCallSubscribePage,
+	})
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

@@ -32,11 +32,39 @@ type Store interface {
 
 	ListMessages(ctx context.Context, sessionID, userID string, limit int, beforeID string) ([]storage.MessageRow, bool, error)
 	CreateMessage(ctx context.Context, sessionID, senderID, msgType string, text *string, meta *storage.MessageMeta, nowMs int64) (storage.MessageRow, error)
+
+	CreateCall(ctx context.Context, callerID, calleeID, mediaType, groupID string, nowMs int64) (storage.CallRow, error)
+	GetCallByID(ctx context.Context, callID string) (storage.CallRow, error)
+	AcceptCall(ctx context.Context, callID, userID string, nowMs int64) (storage.CallRow, error)
+	RejectCall(ctx context.Context, callID, userID string, nowMs int64) (storage.CallRow, error)
+	CancelCall(ctx context.Context, callID, userID string, nowMs int64) (storage.CallRow, error)
+	EndCall(ctx context.Context, callID, userID string, nowMs int64) (storage.CallRow, error)
+
+	UpsertWeChatBinding(ctx context.Context, userID, openID, sessionKey string, unionID *string, nowMs int64) (storage.WeChatBindingRow, error)
+	GetWeChatBindingByUserID(ctx context.Context, userID string) (storage.WeChatBindingRow, error)
+
+	AreFriends(ctx context.Context, userID, peerUserID string) (bool, error)
+	ListFriends(ctx context.Context, userID string) ([]storage.UserRow, error)
+	CreateFriendRequest(ctx context.Context, requesterID, addresseeID string, nowMs int64) (storage.FriendRequestRow, bool, error)
+	ListFriendRequests(ctx context.Context, userID, box, status string) ([]storage.FriendRequestRow, error)
+	AcceptFriendRequest(ctx context.Context, requestID, userID string, nowMs int64) (storage.FriendRequestRow, error)
+	RejectFriendRequest(ctx context.Context, requestID, userID string, nowMs int64) (storage.FriendRequestRow, error)
+	CancelFriendRequest(ctx context.Context, requestID, userID string, nowMs int64) (storage.FriendRequestRow, error)
+
+	GetOrCreateFriendInvite(ctx context.Context, inviterID string, nowMs int64) (storage.FriendInviteRow, bool, error)
+	ResolveFriendInvite(ctx context.Context, code string) (storage.FriendInviteRow, error)
 }
 
-func NewHandler(logger *slog.Logger, store Store, wsManager *ws.Manager, uploadDir string) http.Handler {
+type HandlerOptions struct {
+	WeChatAppID                   string
+	WeChatAppSecret               string
+	WeChatCallSubscribeTemplateID string
+	WeChatCallSubscribePage       string
+}
+
+func NewHandler(logger *slog.Logger, store Store, wsManager *ws.Manager, uploadDir string, opts HandlerOptions) http.Handler {
 	mux := http.NewServeMux()
-	api := newV1API(logger, store, wsManager, uploadDir)
+	api := newV1API(logger, store, wsManager, uploadDir, opts)
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -68,6 +96,11 @@ func NewHandler(logger *slog.Logger, store Store, wsManager *ws.Manager, uploadD
 	mux.HandleFunc("/v1/users/", api.handleUsers)
 	mux.HandleFunc("/v1/sessions", api.handleSessions)
 	mux.HandleFunc("/v1/sessions/", api.handleSessionSubroutes)
+	mux.HandleFunc("/v1/calls", api.handleCalls)
+	mux.HandleFunc("/v1/calls/", api.handleCallSubroutes)
+	mux.HandleFunc("/v1/wechat/", api.handleWeChat)
+	mux.HandleFunc("/v1/friends", api.handleFriends)
+	mux.HandleFunc("/v1/friends/", api.handleFriendSubroutes)
 	mux.HandleFunc("/v1/upload", api.handleUpload)
 
 	// Serve uploaded files
