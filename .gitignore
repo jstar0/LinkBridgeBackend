@@ -39,3 +39,4 @@ uploads/
 linkbridge-api-linux
 linkbridge-backend
 linkbridge-api
+deploy.sh
