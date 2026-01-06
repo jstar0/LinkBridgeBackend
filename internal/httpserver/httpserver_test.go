@@ -30,6 +30,12 @@ func (v tokenMapValidator) ValidateToken(ctx context.Context, token string) (str
 	return userID, nil
 }
 
+type noopCallStore struct{}
+
+func (noopCallStore) GetCallByID(ctx context.Context, callID string) (callerID, calleeID, status string, err error) {
+	return "", "", "", errors.New("not found")
+}
+
 func TestHealthz(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 
@@ -40,7 +46,7 @@ func TestHealthz(t *testing.T) {
 	}
 	defer func() { _ = store.Close() }()
 
-	wsManager := ws.NewManager(logger, tokenMapValidator{tokenToUserID: map[string]string{}})
+	wsManager := ws.NewManager(logger, tokenMapValidator{tokenToUserID: map[string]string{}}, noopCallStore{})
 	handler := NewHandler(logger, store, wsManager, "", HandlerOptions{})
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
@@ -75,7 +81,7 @@ func TestReadyz_NotReady(t *testing.T) {
 	}
 	defer func() { _ = store.Close() }()
 
-	wsManager := ws.NewManager(logger, tokenMapValidator{tokenToUserID: map[string]string{}})
+	wsManager := ws.NewManager(logger, tokenMapValidator{tokenToUserID: map[string]string{}}, noopCallStore{})
 	handler := NewHandler(logger, readyErrStore{Store: store, readyErr: errors.New("db down")}, wsManager, "", HandlerOptions{})
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
@@ -157,7 +163,7 @@ func TestWebSocketBroadcast_SessionsAndMessages(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	tokenToUserID := map[string]string{}
-	wsManager := ws.NewManager(logger, tokenMapValidator{tokenToUserID: tokenToUserID})
+	wsManager := ws.NewManager(logger, tokenMapValidator{tokenToUserID: tokenToUserID}, noopCallStore{})
 	handler := NewHandler(logger, store, wsManager, "", HandlerOptions{})
 	srv := httptest.NewServer(handler)
 	defer srv.Close()

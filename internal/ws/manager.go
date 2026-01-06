@@ -20,7 +20,7 @@ const (
 	maxMessage = 1 << 20
 )
 
-const sendBuffer = 16
+const sendBuffer = 128
 
 type Envelope struct {
 	Type      string `json:"type"`
@@ -313,7 +313,7 @@ func (m *Manager) handleClientMessage(c *client, msg []byte) {
 		return
 	}
 
-	if cm.Type != "audio.frame" {
+	if cm.Type != "audio.frame" && cm.Type != "video.frame" {
 		return
 	}
 
@@ -340,7 +340,7 @@ func (m *Manager) handleClientMessage(c *client, msg []byte) {
 	}
 
 	env := Envelope{
-		Type: "audio.frame",
+		Type: cm.Type,
 		Payload: map[string]string{
 			"callId": cm.CallID,
 			"data":   cm.Data,

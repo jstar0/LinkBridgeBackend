@@ -362,3 +362,111 @@ func TestAudioFrameRelay_HighFrequency(t *testing.T) {
 		t.Errorf("expected at least %d frames, got %d", frameCount*9/10, count)
 	}
 }
+
+// Video frame relay tests
+
+func TestVideoFrameRelay_Success(t *testing.T) {
+	m, tv, cs := setupTestManager()
+
+	tv.tokens["tokenA"] = "userA"
+	tv.tokens["tokenB"] = "userB"
+	cs.SetCall("call1", "userA", "userB", "accepted")
+
+	server := httptest.NewServer(m.Handler())
+	defer server.Close()
+
+	connA := connectWS(t, server, "tokenA")
+	defer connA.Close()
+
+	connB := connectWS(t, server, "tokenB")
+	defer connB.Close()
+
+	time.Sleep(50 * time.Millisecond)
+
+	msg := `{"type":"video.frame","callId":"call1","data":"dmlkZW9kYXRh"}`
+	if err := connA.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	connB.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, data, err := connB.ReadMessage()
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+
+	var env Envelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if env.Type != "video.frame" {
+		t.Errorf("expected type video.frame, got %s", env.Type)
+	}
+
+	payload, ok := env.Payload.(map[string]interface{})
+	if !ok {
+		t.Fatalf("payload is not map")
+	}
+	if payload["callId"] != "call1" {
+		t.Errorf("expected callId call1, got %v", payload["callId"])
+	}
+	if payload["data"] != "dmlkZW9kYXRh" {
+		t.Errorf("expected data dmlkZW9kYXRh, got %v", payload["data"])
+	}
+}
+
+func TestSendBufferSize(t *testing.T) {
+	if sendBuffer != 128 {
+		t.Errorf("sendBuffer = %d, want 128", sendBuffer)
+	}
+}
+
+func TestMixedFrameRelay(t *testing.T) {
+	m, tv, cs := setupTestManager()
+
+	tv.tokens["tokenA"] = "userA"
+	tv.tokens["tokenB"] = "userB"
+	cs.SetCall("call1", "userA", "userB", "accepted")
+
+	server := httptest.NewServer(m.Handler())
+	defer server.Close()
+
+	connA := connectWS(t, server, "tokenA")
+	defer connA.Close()
+
+	connB := connectWS(t, server, "tokenB")
+	defer connB.Close()
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Send audio frame
+	audioMsg := `{"type":"audio.frame","callId":"call1","data":"YXVkaW8="}`
+	if err := connA.WriteMessage(websocket.TextMessage, []byte(audioMsg)); err != nil {
+		t.Fatalf("write audio failed: %v", err)
+	}
+
+	// Send video frame
+	videoMsg := `{"type":"video.frame","callId":"call1","data":"dmlkZW8="}`
+	if err := connA.WriteMessage(websocket.TextMessage, []byte(videoMsg)); err != nil {
+		t.Fatalf("write video failed: %v", err)
+	}
+
+	// Receive both frames
+	for i := 0; i < 2; i++ {
+		connB.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, data, err := connB.ReadMessage()
+		if err != nil {
+			t.Fatalf("read frame %d failed: %v", i, err)
+		}
+
+		var env Envelope
+		if err := json.Unmarshal(data, &env); err != nil {
+			t.Fatalf("unmarshal frame %d failed: %v", i, err)
+		}
+
+		if env.Type != "audio.frame" && env.Type != "video.frame" {
+			t.Errorf("unexpected frame type: %s", env.Type)
+		}
+	}
+}
+
