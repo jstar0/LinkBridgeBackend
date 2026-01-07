@@ -266,6 +266,16 @@ func (api *v1API) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 如果会话已存在且是归档状态，自动激活它
+	if !created && session.Status == storage.SessionStatusArchived {
+		session, err = api.store.ReactivateSession(r.Context(), session.ID, userID, nowMs)
+		if err != nil {
+			api.logger.Error("reactivate session failed", "error", err)
+			writeAPIError(w, ErrCodeInternal, "internal error")
+			return
+		}
+	}
+
 	resp := createSessionResponse{
 		Session: sessionListItem{
 			ID: session.ID,
