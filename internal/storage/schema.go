@@ -39,6 +39,8 @@ func initSchema(ctx context.Context, db *sql.DB) error {
 			last_message_at_ms BIGINT,
 			created_at_ms BIGINT NOT NULL,
 			updated_at_ms BIGINT NOT NULL,
+			hidden_by_users TEXT DEFAULT '[]',
+			reactivated_at_ms BIGINT,
 			FOREIGN KEY(user1_id) REFERENCES users(id),
 			FOREIGN KEY(user2_id) REFERENCES users(id)
 		);`,

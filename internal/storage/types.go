@@ -79,6 +79,8 @@ type SessionRow struct {
 	LastMessageAtMs  *int64
 	CreatedAtMs      int64
 	UpdatedAtMs      int64
+	HiddenByUsers    *string
+	ReactivatedAtMs  *int64
 }
 
 type MessageRow struct {

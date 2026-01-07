@@ -121,6 +121,18 @@ func (api *v1API) handleSessionSubroutes(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		api.handleArchiveSession(w, r, sessionID)
+	case "reactivate":
+		if r.Method != http.MethodPost {
+			writeAPIError(w, ErrCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		api.handleReactivateSession(w, r, sessionID)
+	case "hide":
+		if r.Method != http.MethodPost {
+			writeAPIError(w, ErrCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		api.handleHideSession(w, r, sessionID)
 	case "messages":
 		switch r.Method {
 		case http.MethodGet:
@@ -344,6 +356,95 @@ func (api *v1API) handleArchiveSession(w http.ResponseWriter, r *http.Request, s
 				UpdatedAtMs: session.UpdatedAtMs,
 			},
 		},
+	})
+}
+
+func (api *v1API) handleReactivateSession(w http.ResponseWriter, r *http.Request, sessionID string) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		writeAPIError(w, ErrCodeTokenInvalid, "authentication required")
+		return
+	}
+
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		writeAPIError(w, ErrCodeValidation, "invalid sessionId")
+		return
+	}
+
+	nowMs := time.Now().UnixMilli()
+	session, err := api.store.ReactivateSession(r.Context(), sessionID, userID, nowMs)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			writeAPIError(w, ErrCodeSessionNotFound, "session not found")
+			return
+		}
+		if errors.Is(err, storage.ErrAccessDenied) {
+			writeAPIError(w, ErrCodeSessionAccessDenied, "access denied")
+			return
+		}
+		if errors.Is(err, storage.ErrInvalidState) {
+			writeAPIError(w, ErrCodeValidation, "session is not archived")
+			return
+		}
+		api.logger.Error("reactivate session failed", "error", err)
+		writeAPIError(w, ErrCodeInternal, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"session": map[string]any{
+			"id":               session.ID,
+			"status":           session.Status,
+			"updatedAtMs":      session.UpdatedAtMs,
+			"reactivatedAtMs":  session.ReactivatedAtMs,
+		},
+	})
+
+	api.broadcast(ws.Envelope{
+		Type:      "session.reactivated",
+		SessionID: session.ID,
+		Payload: map[string]any{
+			"session": map[string]any{
+				"id":               session.ID,
+				"status":           session.Status,
+				"updatedAtMs":      session.UpdatedAtMs,
+				"reactivatedAtMs":  session.ReactivatedAtMs,
+			},
+		},
+	})
+}
+
+func (api *v1API) handleHideSession(w http.ResponseWriter, r *http.Request, sessionID string) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		writeAPIError(w, ErrCodeTokenInvalid, "authentication required")
+		return
+	}
+
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		writeAPIError(w, ErrCodeValidation, "invalid sessionId")
+		return
+	}
+
+	err := api.store.HideSession(r.Context(), sessionID, userID)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			writeAPIError(w, ErrCodeSessionNotFound, "session not found")
+			return
+		}
+		if errors.Is(err, storage.ErrAccessDenied) {
+			writeAPIError(w, ErrCodeSessionAccessDenied, "access denied")
+			return
+		}
+		api.logger.Error("hide session failed", "error", err)
+		writeAPIError(w, ErrCodeInternal, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
 	})
 }
 
