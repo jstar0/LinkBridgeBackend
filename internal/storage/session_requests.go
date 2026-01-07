@@ -23,8 +23,13 @@ func (s *Store) CreateSessionRequest(ctx context.Context, requesterID, addressee
 
 	// Check if there's already an active session between these users
 	existingSession, err := s.getSessionByParticipants(ctx, requesterID, addresseeID)
-	if err == nil && existingSession.Status == SessionStatusActive {
-		return SessionRequestRow{}, false, ErrSessionExists
+	if err == nil {
+		if existingSession.Status == SessionStatusActive {
+			return SessionRequestRow{}, false, ErrSessionExists
+		}
+		if existingSession.Status == SessionStatusArchived {
+			return SessionRequestRow{}, false, ErrSessionArchived
+		}
 	}
 
 	// If the reverse request exists and is pending, return error

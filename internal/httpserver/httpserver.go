@@ -28,6 +28,7 @@ type Store interface {
 	ListSessionsForUser(ctx context.Context, userID, status string) ([]storage.SessionRow, error)
 	ArchiveSession(ctx context.Context, sessionID, userID string, nowMs int64) (storage.SessionRow, error)
 	ReactivateSession(ctx context.Context, sessionID, userID string, nowMs int64) (storage.SessionRow, error)
+	ReactivateSessionByParticipants(ctx context.Context, user1ID, user2ID string, nowMs int64) (storage.SessionRow, error)
 	HideSession(ctx context.Context, sessionID, userID string) error
 	IsSessionParticipant(ctx context.Context, sessionID, userID string) (bool, error)
 	GetPeerUserID(session storage.SessionRow, currentUserID string) string

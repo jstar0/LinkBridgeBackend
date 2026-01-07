@@ -376,3 +376,14 @@ func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
+func (s *Store) ReactivateSessionByParticipants(ctx context.Context, user1ID, user2ID string, nowMs int64) (SessionRow, error) {
+	session, err := s.getSessionByParticipants(ctx, user1ID, user2ID)
+	if err != nil {
+		return SessionRow{}, err
+	}
+	if session.Status != SessionStatusArchived {
+		return SessionRow{}, ErrInvalidState
+	}
+	return s.ReactivateSession(ctx, session.ID, user1ID, nowMs)
+}
+
