@@ -23,14 +23,10 @@ func (s *Store) CreateSessionRequest(ctx context.Context, requesterID, addressee
 
 	// Check if there's already an active session between these users
 	existingSession, err := s.getSessionByParticipants(ctx, requesterID, addresseeID)
-	if err == nil {
-		if existingSession.Status == SessionStatusActive {
-			return SessionRequestRow{}, false, ErrSessionExists
-		}
-		if existingSession.Status == SessionStatusArchived {
-			return SessionRequestRow{}, false, ErrSessionArchived
-		}
+	if err == nil && existingSession.Status == SessionStatusActive {
+		return SessionRequestRow{}, false, ErrSessionExists
 	}
+	// 如果会话是归档状态，允许创建请求，接受时会激活会话
 
 	// If the reverse request exists and is pending, return error
 	if reverse, err := s.getSessionRequestByPair(ctx, addresseeID, requesterID); err == nil {
@@ -183,12 +179,28 @@ func (s *Store) mutateSessionRequest(ctx context.Context, requestID, userID stri
 		req.Status = SessionRequestStatusAccepted
 		req.UpdatedAtMs = nowMs
 
-		// Create session between the two users
+		// Create session between the two users, or reactivate if archived
 		sess, err := createSessionInTx(txCtx, tx, s.driver, req.RequesterID, req.AddresseeID, nowMs)
-		if err != nil && !errors.Is(err, ErrSessionExists) {
-			return SessionRequestRow{}, nil, err
+		if err != nil {
+			if errors.Is(err, ErrSessionExists) {
+				// 会话已存在，检查是否需要激活
+				if sess.Status == SessionStatusArchived {
+					// 激活归档的会话
+					updateQ := rebindQuery(s.driver, `UPDATE sessions SET status = ?, reactivated_at_ms = ?, updated_at_ms = ? WHERE id = ?;`)
+					if _, err := tx.ExecContext(txCtx, updateQ, SessionStatusActive, nowMs, nowMs, sess.ID); err != nil {
+						return SessionRequestRow{}, nil, err
+					}
+					sess.Status = SessionStatusActive
+					sess.ReactivatedAtMs = &nowMs
+					sess.UpdatedAtMs = nowMs
+				}
+				session = &sess
+			} else {
+				return SessionRequestRow{}, nil, err
+			}
+		} else {
+			session = &sess
 		}
-		session = &sess
 	case "reject":
 		if req.AddresseeID != userID {
 			return SessionRequestRow{}, nil, ErrAccessDenied

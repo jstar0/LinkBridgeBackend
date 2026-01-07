@@ -140,21 +140,6 @@ func (api *v1API) handleConsumeSessionInvite(w http.ResponseWriter, r *http.Requ
 			writeAPIError(w, ErrCodeSessionExists, "session already exists")
 			return
 		}
-		if errors.Is(err, storage.ErrSessionArchived) {
-			// 会话已归档，自动激活它
-			session, reactivateErr := api.store.ReactivateSessionByParticipants(r.Context(), userID, invite.InviterID, nowMs)
-			if reactivateErr != nil {
-				api.logger.Error("reactivate archived session failed", "error", reactivateErr)
-				writeAPIError(w, ErrCodeInternal, "internal error")
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{
-				"reactivated": true,
-				"sessionId":   session.ID,
-				"hint":        "会话已重新激活",
-			})
-			return
-		}
 		if errors.Is(err, storage.ErrRequestExists) {
 			writeAPIError(w, ErrCodeSessionRequestExists, "session request exists")
 			return
