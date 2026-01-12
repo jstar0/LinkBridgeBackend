@@ -13,6 +13,7 @@ import (
 type homeBaseItem struct {
 	Lat            float64 `json:"lat"`
 	Lng            float64 `json:"lng"`
+	RadiusM        int     `json:"radiusM"`
 	LastUpdatedYMD int     `json:"lastUpdatedYmd"`
 	UpdatedAtMs    int64   `json:"updatedAtMs"`
 }
@@ -22,8 +23,9 @@ type getHomeBaseResponse struct {
 }
 
 type upsertHomeBaseRequest struct {
-	Lat float64 `json:"lat"`
-	Lng float64 `json:"lng"`
+	Lat     float64 `json:"lat"`
+	Lng     float64 `json:"lng"`
+	RadiusM *int    `json:"radiusM,omitempty"`
 }
 
 func (api *v1API) handleHomeBase(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +61,7 @@ func (api *v1API) handleGetHomeBase(w http.ResponseWriter, r *http.Request) {
 		HomeBase: &homeBaseItem{
 			Lat:            e7ToFloat(hb.LatE7),
 			Lng:            e7ToFloat(hb.LngE7),
+			RadiusM:        hb.VisibilityRadiusM,
 			LastUpdatedYMD: hb.LastUpdatedYMD,
 			UpdatedAtMs:    hb.UpdatedAtMs,
 		},
@@ -82,9 +85,15 @@ func (api *v1API) handleUpsertHomeBase(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, ErrCodeValidation, "invalid lat/lng range")
 		return
 	}
+	if req.RadiusM != nil {
+		if *req.RadiusM <= 0 || *req.RadiusM > 200000 {
+			writeAPIError(w, ErrCodeValidation, "invalid radiusM")
+			return
+		}
+	}
 
 	nowMs := time.Now().UnixMilli()
-	hb, err := api.store.UpsertHomeBase(r.Context(), userID, floatToE7(req.Lat), floatToE7(req.Lng), nowMs)
+	hb, err := api.store.UpsertHomeBase(r.Context(), userID, floatToE7(req.Lat), floatToE7(req.Lng), req.RadiusM, nowMs)
 	if err != nil {
 		if errors.Is(err, storage.ErrHomeBaseLimited) {
 			writeAPIError(w, ErrCodeHomeBaseUpdateLimited, "home base can only be updated 3 times per day (0:00 reset)")
@@ -99,6 +108,7 @@ func (api *v1API) handleUpsertHomeBase(w http.ResponseWriter, r *http.Request) {
 		HomeBase: &homeBaseItem{
 			Lat:            e7ToFloat(hb.LatE7),
 			Lng:            e7ToFloat(hb.LngE7),
+			RadiusM:        hb.VisibilityRadiusM,
 			LastUpdatedYMD: hb.LastUpdatedYMD,
 			UpdatedAtMs:    hb.UpdatedAtMs,
 		},

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -11,18 +12,28 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s *Store) CreateLocalFeedPost(ctx context.Context, userID string, text *string, imageURLs []string, radiusM int, expiresAtMs int64, isPinned bool, nowMs int64) (LocalFeedPostRow, []LocalFeedPostImageRow, error) {
+func (s *Store) CreateLocalFeedPost(ctx context.Context, userID string, text *string, imageURLs []string, expiresAtMs int64, isPinned bool, nowMs int64) (LocalFeedPostRow, []LocalFeedPostImageRow, error) {
 	if s == nil || s.db == nil {
 		return LocalFeedPostRow{}, nil, fmt.Errorf("db not initialized")
 	}
 	if userID == "" {
 		return LocalFeedPostRow{}, nil, fmt.Errorf("missing userID")
 	}
-	if radiusM <= 0 {
-		return LocalFeedPostRow{}, nil, fmt.Errorf("invalid radiusM")
-	}
 	if expiresAtMs <= nowMs {
 		return LocalFeedPostRow{}, nil, fmt.Errorf("invalid expiresAtMs")
+	}
+
+	const defaultVisibilityRadiusM = 1100
+	radiusM := defaultVisibilityRadiusM
+	if hb, err := s.GetHomeBase(ctx, userID); err == nil {
+		if hb.VisibilityRadiusM > 0 {
+			radiusM = hb.VisibilityRadiusM
+		}
+	} else if !errors.Is(err, ErrNotFound) {
+		return LocalFeedPostRow{}, nil, err
+	}
+	if radiusM <= 0 {
+		return LocalFeedPostRow{}, nil, fmt.Errorf("invalid visibility radius")
 	}
 
 	var normalizedText *string
@@ -168,7 +179,7 @@ func (s *Store) ListLocalFeedPostsForSource(ctx context.Context, sourceUserID st
 
 		if hb != nil {
 			dist := distanceMetersE7(hb.LatE7, hb.LngE7, *atLatE7, *atLngE7)
-			if dist > float64(p.RadiusM) {
+			if dist > float64(hb.VisibilityRadiusM) {
 				continue
 			}
 		}

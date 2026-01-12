@@ -25,30 +25,36 @@ func TestUpsertHomeBase_DailyLimit(t *testing.T) {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 
-	if _, err := store.UpsertHomeBase(ctx, user.ID, 310000000, 1210000000, now); err != nil {
+	if _, err := store.UpsertHomeBase(ctx, user.ID, 310000000, 1210000000, nil, now); err != nil {
 		t.Fatalf("UpsertHomeBase(first) error = %v", err)
 	}
 
-	// Same day, different coordinates -> allowed up to 3 updates.
-	if _, err := store.UpsertHomeBase(ctx, user.ID, 320000000, 1220000000, now+1000); err != nil {
-		t.Fatalf("UpsertHomeBase(second) error = %v, want nil", err)
+	// Same day, up to 3 location changes are allowed.
+	if _, err := store.UpsertHomeBase(ctx, user.ID, 320000000, 1220000000, nil, now+1000); err != nil {
+		t.Fatalf("UpsertHomeBase(second) error = %v", err)
 	}
-	if _, err := store.UpsertHomeBase(ctx, user.ID, 330000000, 1230000000, now+2000); err != nil {
-		t.Fatalf("UpsertHomeBase(third) error = %v, want nil", err)
+	if _, err := store.UpsertHomeBase(ctx, user.ID, 330000000, 1230000000, nil, now+2000); err != nil {
+		t.Fatalf("UpsertHomeBase(third) error = %v", err)
 	}
 
-	// 4th change on the same day -> blocked.
-	if _, err := store.UpsertHomeBase(ctx, user.ID, 340000000, 1240000000, now+3000); err != ErrHomeBaseLimited {
+	// Same day, 4th different coordinates -> blocked.
+	if _, err := store.UpsertHomeBase(ctx, user.ID, 340000000, 1240000000, nil, now+3000); err != ErrHomeBaseLimited {
 		t.Fatalf("UpsertHomeBase(fourth) error = %v, want ErrHomeBaseLimited", err)
 	}
 
-	// Same day, same coordinates -> idempotent OK (even after hitting the limit).
-	if _, err := store.UpsertHomeBase(ctx, user.ID, 330000000, 1230000000, now+4000); err != nil {
+	// Same day, same coordinates -> idempotent OK.
+	if _, err := store.UpsertHomeBase(ctx, user.ID, 310000000, 1210000000, nil, now+4000); err != nil {
 		t.Fatalf("UpsertHomeBase(idempotent) error = %v", err)
 	}
 
+	// Radius-only change should not consume the location update quota.
+	r := 2000
+	if _, err := store.UpsertHomeBase(ctx, user.ID, 310000000, 1210000000, &r, now+5000); err != nil {
+		t.Fatalf("UpsertHomeBase(radius-only) error = %v", err)
+	}
+
 	// Next day -> allowed.
-	if _, err := store.UpsertHomeBase(ctx, user.ID, 320000000, 1220000000, now+24*60*60*1000+1000); err != nil {
+	if _, err := store.UpsertHomeBase(ctx, user.ID, 320000000, 1220000000, nil, now+24*60*60*1000+1000); err != nil {
 		t.Fatalf("UpsertHomeBase(next day) error = %v", err)
 	}
 }

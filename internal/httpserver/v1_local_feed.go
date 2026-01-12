@@ -121,15 +121,6 @@ func (api *v1API) handleCreateLocalFeedPost(w http.ResponseWriter, r *http.Reque
 
 	nowMs := time.Now().UnixMilli()
 
-	radiusM := 1000
-	if req.RadiusM != nil {
-		radiusM = *req.RadiusM
-	}
-	if radiusM <= 0 || radiusM > 200000 {
-		writeAPIError(w, ErrCodeValidation, "invalid radiusM")
-		return
-	}
-
 	expiresAtMs := nowMs + 30*24*60*60*1000
 	if req.ExpiresAtMs != nil {
 		expiresAtMs = *req.ExpiresAtMs
@@ -157,7 +148,7 @@ func (api *v1API) handleCreateLocalFeedPost(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	post, images, err := api.store.CreateLocalFeedPost(r.Context(), userID, req.Text, req.ImageURLs, radiusM, expiresAtMs, isPinned, nowMs)
+	post, images, err := api.store.CreateLocalFeedPost(r.Context(), userID, req.Text, req.ImageURLs, expiresAtMs, isPinned, nowMs)
 	if err != nil {
 		api.logger.Error("create local feed post failed", "error", err)
 		writeAPIError(w, ErrCodeInternal, "internal error")

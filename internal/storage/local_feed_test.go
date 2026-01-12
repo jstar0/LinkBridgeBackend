@@ -26,13 +26,14 @@ func TestLocalFeed_PostVisibilityByRadius(t *testing.T) {
 	}
 
 	// Home base at (31.0, 121.0).
-	if _, err := store.UpsertHomeBase(ctx, u.ID, 310000000, 1210000000, now); err != nil {
+	radius := 1000
+	if _, err := store.UpsertHomeBase(ctx, u.ID, 310000000, 1210000000, &radius, now); err != nil {
 		t.Fatalf("UpsertHomeBase() error = %v", err)
 	}
 
 	text := "hello"
 	expiresAt := now + 24*60*60*1000
-	if _, _, err := store.CreateLocalFeedPost(ctx, u.ID, &text, nil, 1000, expiresAt, false, now); err != nil {
+	if _, _, err := store.CreateLocalFeedPost(ctx, u.ID, &text, nil, expiresAt, false, now); err != nil {
 		t.Fatalf("CreateLocalFeedPost() error = %v", err)
 	}
 
@@ -73,7 +74,7 @@ func TestLocalFeed_PinsUseMapProfileOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
-	if _, err := store.UpsertHomeBase(ctx, u.ID, 310000000, 1210000000, now); err != nil {
+	if _, err := store.UpsertHomeBase(ctx, u.ID, 310000000, 1210000000, nil, now); err != nil {
 		t.Fatalf("UpsertHomeBase() error = %v", err)
 	}
 

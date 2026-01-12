@@ -40,3 +40,5 @@ linkbridge-api-linux
 linkbridge-backend
 linkbridge-api
 deploy.sh
+deploy.local.*
+.tools/

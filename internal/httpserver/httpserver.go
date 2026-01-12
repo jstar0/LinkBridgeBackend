@@ -62,9 +62,9 @@ type Store interface {
 	UpdateSessionInviteSettings(ctx context.Context, inviterID string, expiresAtMs *int64, geoFence *storage.GeoFence, nowMs int64) (storage.SessionInviteRow, error)
 
 	GetHomeBase(ctx context.Context, userID string) (storage.HomeBaseRow, error)
-	UpsertHomeBase(ctx context.Context, userID string, latE7, lngE7 int64, nowMs int64) (storage.HomeBaseRow, error)
+	UpsertHomeBase(ctx context.Context, userID string, latE7, lngE7 int64, visibilityRadiusM *int, nowMs int64) (storage.HomeBaseRow, error)
 
-	CreateLocalFeedPost(ctx context.Context, userID string, text *string, imageURLs []string, radiusM int, expiresAtMs int64, isPinned bool, nowMs int64) (storage.LocalFeedPostRow, []storage.LocalFeedPostImageRow, error)
+	CreateLocalFeedPost(ctx context.Context, userID string, text *string, imageURLs []string, expiresAtMs int64, isPinned bool, nowMs int64) (storage.LocalFeedPostRow, []storage.LocalFeedPostImageRow, error)
 	DeleteLocalFeedPost(ctx context.Context, userID, postID string) error
 	ListLocalFeedPostsForSource(ctx context.Context, sourceUserID string, atLatE7, atLngE7 *int64, nowMs int64, limit int) ([]storage.LocalFeedPostWithImages, error)
 	ListLocalFeedPins(ctx context.Context, minLatE7, maxLatE7, minLngE7, maxLngE7, centerLatE7, centerLngE7 int64, limit int) ([]storage.LocalFeedPinRow, error)
