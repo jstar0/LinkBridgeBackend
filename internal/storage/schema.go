@@ -134,14 +134,15 @@ func initSchema(ctx context.Context, db *sql.DB, driver string) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_invites_inviter ON session_invites(inviter_id);`,
 
 		`CREATE TABLE IF NOT EXISTS home_bases (
-			user_id TEXT PRIMARY KEY,
-			lat_e7 BIGINT NOT NULL,
-			lng_e7 BIGINT NOT NULL,
-			last_updated_ymd INTEGER NOT NULL,
-			created_at_ms BIGINT NOT NULL,
-			updated_at_ms BIGINT NOT NULL,
-			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-		);`,
+				user_id TEXT PRIMARY KEY,
+				lat_e7 BIGINT NOT NULL,
+				lng_e7 BIGINT NOT NULL,
+				last_updated_ymd INTEGER NOT NULL,
+				daily_update_count INTEGER NOT NULL DEFAULT 1,
+				created_at_ms BIGINT NOT NULL,
+				updated_at_ms BIGINT NOT NULL,
+				FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+			);`,
 		`CREATE INDEX IF NOT EXISTS idx_home_bases_lat_lng ON home_bases(lat_e7, lng_e7);`,
 
 		`CREATE TABLE IF NOT EXISTS user_card_profiles (

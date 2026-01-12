@@ -179,12 +179,13 @@ type SessionInviteRow struct {
 }
 
 type HomeBaseRow struct {
-	UserID         string
-	LatE7          int64
-	LngE7          int64
-	LastUpdatedYMD int
-	CreatedAtMs    int64
-	UpdatedAtMs    int64
+	UserID           string
+	LatE7            int64
+	LngE7            int64
+	LastUpdatedYMD   int
+	DailyUpdateCount int
+	CreatedAtMs      int64
+	UpdatedAtMs      int64
 }
 
 type UserProfileRow struct {

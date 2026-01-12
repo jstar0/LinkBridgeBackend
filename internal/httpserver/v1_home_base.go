@@ -87,7 +87,7 @@ func (api *v1API) handleUpsertHomeBase(w http.ResponseWriter, r *http.Request) {
 	hb, err := api.store.UpsertHomeBase(r.Context(), userID, floatToE7(req.Lat), floatToE7(req.Lng), nowMs)
 	if err != nil {
 		if errors.Is(err, storage.ErrHomeBaseLimited) {
-			writeAPIError(w, ErrCodeHomeBaseUpdateLimited, "home base can only be updated once per day (0:00 reset)")
+			writeAPIError(w, ErrCodeHomeBaseUpdateLimited, "home base can only be updated 3 times per day (0:00 reset)")
 			return
 		}
 		api.logger.Error("upsert home base failed", "error", err)

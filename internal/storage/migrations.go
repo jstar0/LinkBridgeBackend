@@ -51,6 +51,10 @@ func applyMigrations(ctx context.Context, db *sql.DB, driver string) error {
 		return err
 	}
 
+	if err := ensureColumn(ctx, db, driver, "home_bases", "daily_update_count", "INTEGER NOT NULL DEFAULT 1"); err != nil {
+		return err
+	}
+
 	stmts := []string{
 		`CREATE INDEX IF NOT EXISTS idx_sessions_source_updated_at_ms ON sessions(source, updated_at_ms);`,
 		`CREATE INDEX IF NOT EXISTS idx_session_requests_requester_created_at_ms ON session_requests(requester_id, created_at_ms);`,
