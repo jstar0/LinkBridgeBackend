@@ -104,6 +104,7 @@ func recoverMiddleware(logger *slog.Logger) middleware {
 type contextKey string
 
 const userIDContextKey contextKey = "userID"
+const authTokenContextKey contextKey = "authToken"
 
 func getUserIDFromContext(ctx context.Context) string {
 	if v := ctx.Value(userIDContextKey); v != nil {
@@ -116,6 +117,19 @@ func getUserIDFromContext(ctx context.Context) string {
 
 func setUserIDInContext(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, userIDContextKey, userID)
+}
+
+func getAuthTokenFromContext(ctx context.Context) (storage.AuthTokenRow, bool) {
+	if v := ctx.Value(authTokenContextKey); v != nil {
+		if row, ok := v.(storage.AuthTokenRow); ok {
+			return row, true
+		}
+	}
+	return storage.AuthTokenRow{}, false
+}
+
+func setAuthTokenInContext(ctx context.Context, token storage.AuthTokenRow) context.Context {
+	return context.WithValue(ctx, authTokenContextKey, token)
 }
 
 func authMiddleware(store Store) middleware {
@@ -144,6 +158,7 @@ func authMiddleware(store Store) middleware {
 			}
 
 			ctx := setUserIDInContext(r.Context(), tokenRow.UserID)
+			ctx = setAuthTokenInContext(ctx, tokenRow)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

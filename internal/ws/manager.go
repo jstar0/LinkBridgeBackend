@@ -302,9 +302,11 @@ func encodeJSON(v any) ([]byte, error) {
 }
 
 type clientMessage struct {
-	Type   string `json:"type"`
-	CallID string `json:"callId"`
-	Data   string `json:"data"`
+	Type     string `json:"type"`
+	CallID   string `json:"callId"`
+	Data     string `json:"data"`
+	Seq      int64  `json:"seq,omitempty"`
+	SentAtMs int64  `json:"sentAtMs,omitempty"`
 }
 
 func (m *Manager) handleClientMessage(c *client, msg []byte) {
@@ -339,12 +341,20 @@ func (m *Manager) handleClientMessage(c *client, msg []byte) {
 		return
 	}
 
+	payload := map[string]any{
+		"callId": cm.CallID,
+		"data":   cm.Data,
+	}
+	if cm.Seq != 0 {
+		payload["seq"] = cm.Seq
+	}
+	if cm.SentAtMs != 0 {
+		payload["sentAtMs"] = cm.SentAtMs
+	}
+
 	env := Envelope{
-		Type: cm.Type,
-		Payload: map[string]string{
-			"callId": cm.CallID,
-			"data":   cm.Data,
-		},
+		Type:    cm.Type,
+		Payload: payload,
 	}
 
 	b, err := encodeJSON(env)

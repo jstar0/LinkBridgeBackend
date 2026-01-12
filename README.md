@@ -53,6 +53,8 @@ notepad .env.local
 | WECHAT_APPSECRET | (空) | 小程序 AppSecret（仅后端保存） |
 | WECHAT_CALL_SUBSCRIBE_TEMPLATE_ID | (空) | “来电提醒”订阅消息模板 ID（可选） |
 | WECHAT_CALL_SUBSCRIBE_PAGE | pages/linkbridge/call/call | 订阅消息跳转页面（可选） |
+| WECHAT_ACTIVITY_SUBSCRIBE_TEMPLATE_ID | (空) | “活动提醒”订阅消息模板 ID（可选） |
+| WECHAT_ACTIVITY_SUBSCRIBE_PAGE | pages/chat/index | 订阅消息跳转页面（可选，默认跳到活动群聊） |
 
 ## API 端点
 

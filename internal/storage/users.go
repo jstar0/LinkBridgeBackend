@@ -148,6 +148,35 @@ func (s *Store) UpdateUserDisplayName(ctx context.Context, userID, displayName s
 	return s.GetUserByID(ctx, userID)
 }
 
+func (s *Store) UpdateUserAvatarURL(ctx context.Context, userID string, avatarURL *string, nowMs int64) (UserRow, error) {
+	if s == nil || s.db == nil {
+		return UserRow{}, fmt.Errorf("db not initialized")
+	}
+	if userID == "" {
+		return UserRow{}, fmt.Errorf("missing userID")
+	}
+
+	var avatar sql.NullString
+	if avatarURL != nil {
+		u := strings.TrimSpace(*avatarURL)
+		if u != "" {
+			avatar = sql.NullString{String: u, Valid: true}
+		}
+	}
+
+	q := `UPDATE users SET avatar_url = ?, updated_at_ms = ? WHERE id = ?;`
+	result, err := s.db.ExecContext(ctx, s.rebind(q), avatar, nowMs, userID)
+	if err != nil {
+		return UserRow{}, err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return UserRow{}, fmt.Errorf("%w: user", ErrNotFound)
+	}
+
+	return s.GetUserByID(ctx, userID)
+}
+
 func isUniqueViolation(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "UNIQUE constraint failed") ||

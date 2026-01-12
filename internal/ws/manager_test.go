@@ -196,6 +196,53 @@ func TestAudioFrameRelay_Success(t *testing.T) {
 	}
 }
 
+func TestAudioFrameRelay_ForwardsMetadata(t *testing.T) {
+	m, tv, cs := setupTestManager()
+
+	tv.tokens["tokenA"] = "userA"
+	tv.tokens["tokenB"] = "userB"
+	cs.SetCall("call1", "userA", "userB", "accepted")
+
+	server := httptest.NewServer(m.Handler())
+	defer server.Close()
+
+	connA := connectWS(t, server, "tokenA")
+	defer connA.Close()
+
+	connB := connectWS(t, server, "tokenB")
+	defer connB.Close()
+
+	time.Sleep(50 * time.Millisecond)
+
+	msg := `{"type":"audio.frame","callId":"call1","data":"dGVzdGRhdGE=","seq":123,"sentAtMs":1700000000123}`
+	if err := connA.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	connB.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, data, err := connB.ReadMessage()
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+
+	var env Envelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	payload, ok := env.Payload.(map[string]interface{})
+	if !ok {
+		t.Fatalf("payload is not map")
+	}
+
+	if payload["seq"] != float64(123) {
+		t.Errorf("expected seq 123, got %v", payload["seq"])
+	}
+	if payload["sentAtMs"] != float64(1700000000123) {
+		t.Errorf("expected sentAtMs 1700000000123, got %v", payload["sentAtMs"])
+	}
+}
+
 func TestAudioFrameRelay_CallNotFound(t *testing.T) {
 	m, tv, _ := setupTestManager()
 
@@ -469,4 +516,3 @@ func TestMixedFrameRelay(t *testing.T) {
 		}
 	}
 }
-

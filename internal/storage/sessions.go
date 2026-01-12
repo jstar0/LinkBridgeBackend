@@ -26,6 +26,8 @@ func (s *Store) CreateSession(ctx context.Context, currentUserID, peerUserID str
 	if currentUserID == peerUserID {
 		return SessionRow{}, false, ErrCannotChatSelf
 	}
+	source := SessionSourceManual
+	kind := SessionKindDirect
 
 	hash := computeParticipantsHash(currentUserID, peerUserID)
 
@@ -43,16 +45,18 @@ func (s *Store) CreateSession(ctx context.Context, currentUserID, peerUserID str
 		ParticipantsHash: hash,
 		User1ID:          ids[0],
 		User2ID:          ids[1],
+		Source:           source,
+		Kind:             kind,
 		Status:           SessionStatusActive,
 		CreatedAtMs:      nowMs,
 		UpdatedAtMs:      nowMs,
 	}
 
-	q := `INSERT INTO sessions (id, participants_hash, user1_id, user2_id, status, created_at_ms, updated_at_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?);`
+	q := `INSERT INTO sessions (id, participants_hash, user1_id, user2_id, source, kind, status, created_at_ms, updated_at_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`
 	if _, err := s.db.ExecContext(ctx, s.rebind(q),
 		session.ID, session.ParticipantsHash, session.User1ID, session.User2ID,
-		session.Status, nowMs, nowMs,
+		session.Source, session.Kind, session.Status, nowMs, nowMs,
 	); err != nil {
 		if isUniqueViolation(err) {
 			existing, err := s.getSessionByHash(ctx, hash)
@@ -68,7 +72,7 @@ func (s *Store) CreateSession(ctx context.Context, currentUserID, peerUserID str
 }
 
 func (s *Store) getSessionByHash(ctx context.Context, hash string) (SessionRow, error) {
-	q := `SELECT id, participants_hash, user1_id, user2_id, status, last_message_text, last_message_at_ms, created_at_ms, updated_at_ms, hidden_by_users, reactivated_at_ms
+	q := `SELECT id, participants_hash, user1_id, user2_id, source, kind, status, last_message_text, last_message_at_ms, created_at_ms, updated_at_ms, hidden_by_users, reactivated_at_ms
 		FROM sessions WHERE participants_hash = ?;`
 
 	var session SessionRow
@@ -78,7 +82,7 @@ func (s *Store) getSessionByHash(ctx context.Context, hash string) (SessionRow, 
 	var reactivatedAt sql.NullInt64
 	if err := s.db.QueryRowContext(ctx, s.rebind(q), hash).Scan(
 		&session.ID, &session.ParticipantsHash, &session.User1ID, &session.User2ID,
-		&session.Status, &lastText, &lastAtMs, &session.CreatedAtMs, &session.UpdatedAtMs,
+		&session.Source, &session.Kind, &session.Status, &lastText, &lastAtMs, &session.CreatedAtMs, &session.UpdatedAtMs,
 		&hiddenBy, &reactivatedAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
@@ -106,7 +110,7 @@ func (s *Store) GetSessionByID(ctx context.Context, sessionID string) (SessionRo
 		return SessionRow{}, fmt.Errorf("db not initialized")
 	}
 
-	q := `SELECT id, participants_hash, user1_id, user2_id, status, last_message_text, last_message_at_ms, created_at_ms, updated_at_ms, hidden_by_users, reactivated_at_ms
+	q := `SELECT id, participants_hash, user1_id, user2_id, source, kind, status, last_message_text, last_message_at_ms, created_at_ms, updated_at_ms, hidden_by_users, reactivated_at_ms
 		FROM sessions WHERE id = ?;`
 
 	var session SessionRow
@@ -116,7 +120,7 @@ func (s *Store) GetSessionByID(ctx context.Context, sessionID string) (SessionRo
 	var reactivatedAt sql.NullInt64
 	if err := s.db.QueryRowContext(ctx, s.rebind(q), sessionID).Scan(
 		&session.ID, &session.ParticipantsHash, &session.User1ID, &session.User2ID,
-		&session.Status, &lastText, &lastAtMs, &session.CreatedAtMs, &session.UpdatedAtMs,
+		&session.Source, &session.Kind, &session.Status, &lastText, &lastAtMs, &session.CreatedAtMs, &session.UpdatedAtMs,
 		&hiddenBy, &reactivatedAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
@@ -144,13 +148,13 @@ func (s *Store) ListSessionsForUser(ctx context.Context, userID, status string) 
 		return nil, fmt.Errorf("db not initialized")
 	}
 
-	q := `SELECT id, participants_hash, user1_id, user2_id, status, last_message_text, last_message_at_ms, created_at_ms, updated_at_ms, hidden_by_users, reactivated_at_ms
+	q := `SELECT id, participants_hash, user1_id, user2_id, source, kind, status, last_message_text, last_message_at_ms, created_at_ms, updated_at_ms, hidden_by_users, reactivated_at_ms
 		FROM sessions
-		WHERE (user1_id = ? OR user2_id = ?) AND status = ?
+		WHERE kind = ? AND (user1_id = ? OR user2_id = ?) AND status = ?
 		AND (hidden_by_users IS NULL OR hidden_by_users NOT LIKE '%' || ? || '%')
 		ORDER BY updated_at_ms DESC;`
 
-	rows, err := s.db.QueryContext(ctx, s.rebind(q), userID, userID, status, userID)
+	rows, err := s.db.QueryContext(ctx, s.rebind(q), SessionKindDirect, userID, userID, status, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +169,7 @@ func (s *Store) ListSessionsForUser(ctx context.Context, userID, status string) 
 		var reactivatedAt sql.NullInt64
 		if err := rows.Scan(
 			&session.ID, &session.ParticipantsHash, &session.User1ID, &session.User2ID,
-			&session.Status, &lastText, &lastAtMs, &session.CreatedAtMs, &session.UpdatedAtMs,
+			&session.Source, &session.Kind, &session.Status, &lastText, &lastAtMs, &session.CreatedAtMs, &session.UpdatedAtMs,
 			&hiddenBy, &reactivatedAt,
 		); err != nil {
 			return nil, err
@@ -220,15 +224,33 @@ func (s *Store) IsSessionParticipant(ctx context.Context, sessionID, userID stri
 		return false, fmt.Errorf("db not initialized")
 	}
 
-	q := `SELECT 1 FROM sessions WHERE id = ? AND (user1_id = ? OR user2_id = ?);`
-	var one int
-	if err := s.db.QueryRowContext(ctx, s.rebind(q), sessionID, userID, userID).Scan(&one); err != nil {
+	const q = `SELECT kind, user1_id, user2_id FROM sessions WHERE id = ?;`
+	var kind string
+	var user1ID string
+	var user2ID string
+	if err := s.db.QueryRowContext(ctx, s.rebind(q), sessionID).Scan(&kind, &user1ID, &user2ID); err != nil {
 		if err == sql.ErrNoRows {
 			return false, nil
 		}
 		return false, err
 	}
-	return true, nil
+
+	switch kind {
+	case SessionKindGroup:
+		const memberQ = `SELECT 1 FROM session_participants
+			WHERE session_id = ? AND user_id = ? AND status = 'active';`
+		var one int
+		if err := s.db.QueryRowContext(ctx, s.rebind(memberQ), sessionID, userID).Scan(&one); err != nil {
+			if err == sql.ErrNoRows {
+				return false, nil
+			}
+			return false, err
+		}
+		return true, nil
+	default:
+		// Default to direct session semantics.
+		return user1ID == userID || user2ID == userID, nil
+	}
 }
 
 func (s *Store) GetPeerUserID(session SessionRow, currentUserID string) string {
@@ -243,11 +265,13 @@ func (s *Store) getSessionByParticipants(ctx context.Context, user1ID, user2ID s
 	return s.getSessionByHash(ctx, hash)
 }
 
-func createSessionInTx(ctx context.Context, tx *sql.Tx, driver, user1ID, user2ID string, nowMs int64) (SessionRow, error) {
+func createSessionInTx(ctx context.Context, tx *sql.Tx, driver, user1ID, user2ID, source string, nowMs int64) (SessionRow, error) {
 	hash := computeParticipantsHash(user1ID, user2ID)
+	source = normalizeSessionSource(source)
+	kind := SessionKindDirect
 
 	// Check if session already exists
-	selectQ := rebindQuery(driver, `SELECT id, participants_hash, user1_id, user2_id, status, last_message_text, last_message_at_ms, created_at_ms, updated_at_ms, hidden_by_users, reactivated_at_ms
+	selectQ := rebindQuery(driver, `SELECT id, participants_hash, user1_id, user2_id, source, kind, status, last_message_text, last_message_at_ms, created_at_ms, updated_at_ms, hidden_by_users, reactivated_at_ms
 		FROM sessions WHERE participants_hash = ?;`)
 	var existing SessionRow
 	var lastText sql.NullString
@@ -256,7 +280,7 @@ func createSessionInTx(ctx context.Context, tx *sql.Tx, driver, user1ID, user2ID
 	var reactivatedAt sql.NullInt64
 	if err := tx.QueryRowContext(ctx, selectQ, hash).Scan(
 		&existing.ID, &existing.ParticipantsHash, &existing.User1ID, &existing.User2ID,
-		&existing.Status, &lastText, &lastAtMs, &existing.CreatedAtMs, &existing.UpdatedAtMs,
+		&existing.Source, &existing.Kind, &existing.Status, &lastText, &lastAtMs, &existing.CreatedAtMs, &existing.UpdatedAtMs,
 		&hiddenBy, &reactivatedAt,
 	); err == nil {
 		if lastText.Valid {
@@ -285,21 +309,35 @@ func createSessionInTx(ctx context.Context, tx *sql.Tx, driver, user1ID, user2ID
 		ParticipantsHash: hash,
 		User1ID:          ids[0],
 		User2ID:          ids[1],
+		Source:           source,
+		Kind:             kind,
 		Status:           SessionStatusActive,
 		CreatedAtMs:      nowMs,
 		UpdatedAtMs:      nowMs,
 	}
 
-	insertQ := rebindQuery(driver, `INSERT INTO sessions (id, participants_hash, user1_id, user2_id, status, created_at_ms, updated_at_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?);`)
+	insertQ := rebindQuery(driver, `INSERT INTO sessions (id, participants_hash, user1_id, user2_id, source, kind, status, created_at_ms, updated_at_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`)
 	if _, err := tx.ExecContext(ctx, insertQ,
 		session.ID, session.ParticipantsHash, session.User1ID, session.User2ID,
-		session.Status, nowMs, nowMs,
+		session.Source, session.Kind, session.Status, nowMs, nowMs,
 	); err != nil {
 		return SessionRow{}, err
 	}
 
 	return session, nil
+}
+
+func normalizeSessionSource(source string) string {
+	source = strings.TrimSpace(source)
+	switch source {
+	case SessionSourceWeChatCode, SessionSourceMap, SessionSourceActivity, SessionSourceManual:
+		return source
+	case "":
+		return SessionSourceWeChatCode
+	default:
+		return source
+	}
 }
 
 func (s *Store) ReactivateSession(ctx context.Context, sessionID, userID string, nowMs int64) (SessionRow, error) {
@@ -386,4 +424,3 @@ func (s *Store) ReactivateSessionByParticipants(ctx context.Context, user1ID, us
 	}
 	return s.ReactivateSession(ctx, session.ID, user1ID, nowMs)
 }
-

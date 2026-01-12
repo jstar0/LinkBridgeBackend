@@ -63,7 +63,7 @@ func Open(ctx context.Context, databaseURL string, logger *slog.Logger) (*Store,
 		return nil, err
 	}
 
-	if err := initSchema(pingCtx, db); err != nil {
+	if err := initSchema(pingCtx, db, driverName); err != nil {
 		_ = db.Close()
 		return nil, err
 	}

@@ -107,9 +107,31 @@ func (s *Store) CreateMessage(ctx context.Context, sessionID, senderID, msgType 
 	if err != nil {
 		return MessageRow{}, err
 	}
-	if session.User1ID != senderID && session.User2ID != senderID {
+
+	isParticipant, err := s.IsSessionParticipant(ctx, sessionID, senderID)
+	if err != nil {
+		return MessageRow{}, err
+	}
+	if !isParticipant {
 		return MessageRow{}, ErrAccessDenied
 	}
+
+	// Activity group chats auto-archive after endAtMs:
+	// block sending new messages once ended, even if the session wasn't explicitly archived yet.
+	if session.Kind == SessionKindGroup && session.Source == SessionSourceActivity && session.Status == SessionStatusActive {
+		var endAt sql.NullInt64
+		endQ := `SELECT end_at_ms FROM activities WHERE session_id = ?;`
+		if err := s.db.QueryRowContext(ctx, s.rebind(endQ), sessionID).Scan(&endAt); err == nil && endAt.Valid {
+			if nowMs >= endAt.Int64 {
+				archiveQ := `UPDATE sessions SET status = ?, updated_at_ms = ? WHERE id = ?;`
+				if _, err := s.db.ExecContext(ctx, s.rebind(archiveQ), SessionStatusArchived, nowMs, sessionID); err != nil {
+					return MessageRow{}, err
+				}
+				return MessageRow{}, ErrSessionArchived
+			}
+		}
+	}
+
 	if session.Status == SessionStatusArchived {
 		return MessageRow{}, ErrSessionArchived
 	}

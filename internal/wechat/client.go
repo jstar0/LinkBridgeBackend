@@ -219,11 +219,11 @@ func (c *Client) SendSubscribeMessage(ctx context.Context, accessToken string, r
 }
 
 type WxaCodeUnlimitRequest struct {
-	Scene     string `json:"scene"`
-	Page      string `json:"page,omitempty"`
-	CheckPath bool   `json:"check_path"`
+	Scene      string `json:"scene"`
+	Page       string `json:"page,omitempty"`
+	CheckPath  bool   `json:"check_path"`
 	EnvVersion string `json:"env_version,omitempty"` // develop|trial|release
-	Width     int    `json:"width,omitempty"`
+	Width      int    `json:"width,omitempty"`
 }
 
 type wxaCodeErrorResponse struct {

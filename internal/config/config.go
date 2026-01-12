@@ -12,10 +12,12 @@ type Config struct {
 	LogLevel    string
 	UploadDir   string
 
-	WeChatAppID                 string
-	WeChatAppSecret             string
-	WeChatCallSubscribeTemplateID string
-	WeChatCallSubscribePage       string
+	WeChatAppID                       string
+	WeChatAppSecret                   string
+	WeChatCallSubscribeTemplateID     string
+	WeChatCallSubscribePage           string
+	WeChatActivitySubscribeTemplateID string
+	WeChatActivitySubscribePage       string
 }
 
 func Load() (Config, error) {
@@ -25,10 +27,12 @@ func Load() (Config, error) {
 		LogLevel:    strings.TrimSpace(getEnv("LOG_LEVEL", "info")),
 		UploadDir:   getEnv("UPLOAD_DIR", "./uploads"),
 
-		WeChatAppID:                   strings.TrimSpace(getEnv("WECHAT_APPID", "")),
-		WeChatAppSecret:               strings.TrimSpace(getEnv("WECHAT_APPSECRET", "")),
-		WeChatCallSubscribeTemplateID: strings.TrimSpace(getEnv("WECHAT_CALL_SUBSCRIBE_TEMPLATE_ID", "")),
-		WeChatCallSubscribePage:       strings.TrimSpace(getEnv("WECHAT_CALL_SUBSCRIBE_PAGE", "pages/linkbridge/call/call")),
+		WeChatAppID:                       strings.TrimSpace(getEnv("WECHAT_APPID", "")),
+		WeChatAppSecret:                   strings.TrimSpace(getEnv("WECHAT_APPSECRET", "")),
+		WeChatCallSubscribeTemplateID:     strings.TrimSpace(getEnv("WECHAT_CALL_SUBSCRIBE_TEMPLATE_ID", "")),
+		WeChatCallSubscribePage:           strings.TrimSpace(getEnv("WECHAT_CALL_SUBSCRIBE_PAGE", "pages/linkbridge/call/call")),
+		WeChatActivitySubscribeTemplateID: strings.TrimSpace(getEnv("WECHAT_ACTIVITY_SUBSCRIBE_TEMPLATE_ID", "")),
+		WeChatActivitySubscribePage:       strings.TrimSpace(getEnv("WECHAT_ACTIVITY_SUBSCRIBE_PAGE", "pages/chat/index")),
 	}
 
 	if strings.TrimSpace(cfg.HTTPAddr) == "" {

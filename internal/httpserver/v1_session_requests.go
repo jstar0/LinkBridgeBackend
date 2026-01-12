@@ -11,16 +11,21 @@ import (
 )
 
 type consumeSessionInviteRequest struct {
-	Code string `json:"code"`
+	Code  string   `json:"code"`
+	AtLat *float64 `json:"atLat,omitempty"`
+	AtLng *float64 `json:"atLng,omitempty"`
 }
 
 type sessionRequestItem struct {
-	ID          string `json:"id"`
-	RequesterID string `json:"requesterId"`
-	AddresseeID string `json:"addresseeId"`
-	Status      string `json:"status"`
-	CreatedAtMs int64  `json:"createdAtMs"`
-	UpdatedAtMs int64  `json:"updatedAtMs"`
+	ID                  string  `json:"id"`
+	RequesterID         string  `json:"requesterId"`
+	AddresseeID         string  `json:"addresseeId"`
+	Status              string  `json:"status"`
+	Source              string  `json:"source"`
+	VerificationMessage *string `json:"verificationMessage,omitempty"`
+	CreatedAtMs         int64   `json:"createdAtMs"`
+	UpdatedAtMs         int64   `json:"updatedAtMs"`
+	LastOpenedAtMs      int64   `json:"lastOpenedAtMs"`
 }
 
 type createSessionRequestResponse struct {
@@ -52,11 +57,14 @@ func sessionItemFromRow(s storage.SessionRow) sessionItem {
 }
 
 func (api *v1API) handleSessionRequests(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		api.handleListSessionRequests(w, r)
+	case http.MethodPost:
+		api.handleCreateSessionRequest(w, r)
+	default:
 		writeAPIError(w, ErrCodeMethodNotAllowed, "method not allowed")
-		return
 	}
-	api.handleListSessionRequests(w, r)
 }
 
 func (api *v1API) handleSessionRequestSubroutes(w http.ResponseWriter, r *http.Request) {
@@ -118,19 +126,52 @@ func (api *v1API) handleConsumeSessionInvite(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	invite, err := api.store.ResolveSessionInvite(r.Context(), req.Code)
+	var (
+		atLatE7 *int64
+		atLngE7 *int64
+	)
+	if req.AtLat != nil {
+		if *req.AtLat < -90 || *req.AtLat > 90 {
+			writeAPIError(w, ErrCodeValidation, "invalid atLat range")
+			return
+		}
+		v := floatToE7(*req.AtLat)
+		atLatE7 = &v
+	}
+	if req.AtLng != nil {
+		if *req.AtLng < -180 || *req.AtLng > 180 {
+			writeAPIError(w, ErrCodeValidation, "invalid atLng range")
+			return
+		}
+		v := floatToE7(*req.AtLng)
+		atLngE7 = &v
+	}
+
+	nowMs := time.Now().UnixMilli()
+	invite, err := api.store.ConsumeSessionInvite(r.Context(), req.Code, atLatE7, atLngE7, nowMs)
 	if err != nil {
 		if errors.Is(err, storage.ErrInviteInvalid) || errors.Is(err, storage.ErrNotFound) {
 			writeAPIError(w, ErrCodeSessionInviteInvalid, "invalid invite")
 			return
 		}
-		api.logger.Error("resolve session invite failed", "error", err)
+		if errors.Is(err, storage.ErrInviteExpired) {
+			writeAPIError(w, ErrCodeInviteExpired, "invite expired")
+			return
+		}
+		if errors.Is(err, storage.ErrGeoFenceRequired) {
+			writeAPIError(w, ErrCodeGeoFenceRequired, "location required")
+			return
+		}
+		if errors.Is(err, storage.ErrGeoFenceForbidden) {
+			writeAPIError(w, ErrCodeGeoFenceForbidden, "outside allowed area")
+			return
+		}
+		api.logger.Error("consume session invite failed", "error", err)
 		writeAPIError(w, ErrCodeInternal, "internal error")
 		return
 	}
 
-	nowMs := time.Now().UnixMilli()
-	sr, created, err := api.store.CreateSessionRequest(r.Context(), userID, invite.InviterID, nowMs)
+	sr, created, err := api.store.CreateSessionRequest(r.Context(), userID, invite.InviterID, storage.SessionRequestSourceWeChatCode, nil, nowMs)
 	if err != nil {
 		if errors.Is(err, storage.ErrCannotChatSelf) {
 			writeAPIError(w, ErrCodeValidation, "cannot add self")
@@ -144,7 +185,90 @@ func (api *v1API) handleConsumeSessionInvite(w http.ResponseWriter, r *http.Requ
 			writeAPIError(w, ErrCodeSessionRequestExists, "session request exists")
 			return
 		}
+		if errors.Is(err, storage.ErrRateLimited) {
+			writeAPIError(w, ErrCodeRateLimited, "rate limited")
+			return
+		}
+		if errors.Is(err, storage.ErrCooldownActive) {
+			writeAPIError(w, ErrCodeCooldownActive, "cooldown active")
+			return
+		}
 		api.logger.Error("create session request from invite failed", "error", err)
+		writeAPIError(w, ErrCodeInternal, "internal error")
+		return
+	}
+
+	item := sessionRequestItemFromRow(sr)
+	hint := ""
+	if !created {
+		hint = "request updated"
+	}
+	writeJSON(w, http.StatusOK, createSessionRequestResponse{Request: item, Created: created, Hint: hint})
+
+	api.sendToUser(sr.AddresseeID, ws.Envelope{
+		Type:      "session.requested",
+		SessionID: "",
+		Payload: map[string]any{
+			"request": item,
+		},
+	})
+}
+
+type createSessionRequestRequest struct {
+	AddresseeID         string  `json:"addresseeId"`
+	VerificationMessage *string `json:"verificationMessage,omitempty"`
+}
+
+func (api *v1API) handleCreateSessionRequest(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		writeAPIError(w, ErrCodeTokenInvalid, "authentication required")
+		return
+	}
+
+	var req createSessionRequestRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeAPIError(w, ErrCodeValidation, "invalid JSON body")
+		return
+	}
+	req.AddresseeID = strings.TrimSpace(req.AddresseeID)
+	if req.AddresseeID == "" {
+		writeAPIError(w, ErrCodeValidation, "addresseeId is required")
+		return
+	}
+	if req.VerificationMessage != nil {
+		msg := strings.TrimSpace(*req.VerificationMessage)
+		if msg == "" {
+			req.VerificationMessage = nil
+		} else {
+			req.VerificationMessage = &msg
+		}
+	}
+
+	nowMs := time.Now().UnixMilli()
+	sr, created, err := api.store.CreateSessionRequest(r.Context(), userID, req.AddresseeID, storage.SessionRequestSourceMap, req.VerificationMessage, nowMs)
+	if err != nil {
+		if errors.Is(err, storage.ErrCannotChatSelf) {
+			writeAPIError(w, ErrCodeValidation, "cannot add self")
+			return
+		}
+		if errors.Is(err, storage.ErrSessionExists) {
+			writeAPIError(w, ErrCodeSessionExists, "session already exists")
+			return
+		}
+		if errors.Is(err, storage.ErrRequestExists) {
+			writeAPIError(w, ErrCodeSessionRequestExists, "session request exists")
+			return
+		}
+		if errors.Is(err, storage.ErrRateLimited) {
+			writeAPIError(w, ErrCodeRateLimited, "rate limited")
+			return
+		}
+		if errors.Is(err, storage.ErrCooldownActive) {
+			writeAPIError(w, ErrCodeCooldownActive, "cooldown active")
+			return
+		}
+		api.logger.Error("create session request failed", "error", err)
 		writeAPIError(w, ErrCodeInternal, "internal error")
 		return
 	}
@@ -277,11 +401,14 @@ func (api *v1API) handleMutateSessionRequest(w http.ResponseWriter, r *http.Requ
 
 func sessionRequestItemFromRow(sr storage.SessionRequestRow) sessionRequestItem {
 	return sessionRequestItem{
-		ID:          sr.ID,
-		RequesterID: sr.RequesterID,
-		AddresseeID: sr.AddresseeID,
-		Status:      sr.Status,
-		CreatedAtMs: sr.CreatedAtMs,
-		UpdatedAtMs: sr.UpdatedAtMs,
+		ID:                  sr.ID,
+		RequesterID:         sr.RequesterID,
+		AddresseeID:         sr.AddresseeID,
+		Status:              sr.Status,
+		Source:              sr.Source,
+		VerificationMessage: sr.VerificationMessage,
+		CreatedAtMs:         sr.CreatedAtMs,
+		UpdatedAtMs:         sr.UpdatedAtMs,
+		LastOpenedAtMs:      sr.LastOpenedAtMs,
 	}
 }

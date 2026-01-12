@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -20,7 +19,8 @@ type getUserResponse struct {
 }
 
 type updateMeRequest struct {
-	DisplayName string `json:"displayName"`
+	DisplayName *string `json:"displayName,omitempty"`
+	AvatarURL   *string `json:"avatarUrl,omitempty"`
 }
 
 type updateMeResponse struct {
@@ -143,32 +143,80 @@ func (api *v1API) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req updateMeRequest
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
-		writeAPIError(w, ErrCodeValidation, "invalid request body")
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeAPIError(w, ErrCodeValidation, "invalid JSON body")
 		return
 	}
 
-	displayName := strings.TrimSpace(req.DisplayName)
-	if displayName == "" {
-		writeAPIError(w, ErrCodeValidation, "displayName is required")
-		return
+	var (
+		updateDisplayName bool
+		displayName       string
+		updateAvatar      bool
+		avatarURL         *string
+	)
+
+	if req.DisplayName != nil {
+		updateDisplayName = true
+		displayName = strings.TrimSpace(*req.DisplayName)
+		if displayName == "" {
+			writeAPIError(w, ErrCodeValidation, "displayName is required")
+			return
+		}
+		if len(displayName) > 20 {
+			writeAPIError(w, ErrCodeValidation, "displayName must be at most 20 characters")
+			return
+		}
 	}
-	if len(displayName) > 20 {
-		writeAPIError(w, ErrCodeValidation, "displayName must be at most 20 characters")
+
+	if req.AvatarURL != nil {
+		updateAvatar = true
+		trimmed := strings.TrimSpace(*req.AvatarURL)
+		if trimmed != "" {
+			avatarURL = &trimmed
+		}
+	}
+
+	if !updateDisplayName && !updateAvatar {
+		writeAPIError(w, ErrCodeValidation, "displayName or avatarUrl is required")
 		return
 	}
 
 	nowMs := time.Now().UnixMilli()
-	user, err := api.store.UpdateUserDisplayName(r.Context(), currentUserID, displayName, nowMs)
+	user, err := api.store.GetUserByID(r.Context(), currentUserID)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			writeAPIError(w, ErrCodeUserNotFound, "user not found")
 			return
 		}
-		api.logger.Error("update user display name failed", "error", err)
+		api.logger.Error("get current user failed", "error", err)
 		writeAPIError(w, ErrCodeInternal, "internal error")
 		return
+	}
+
+	if updateDisplayName {
+		user, err = api.store.UpdateUserDisplayName(r.Context(), currentUserID, displayName, nowMs)
+		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				writeAPIError(w, ErrCodeUserNotFound, "user not found")
+				return
+			}
+			api.logger.Error("update user display name failed", "error", err)
+			writeAPIError(w, ErrCodeInternal, "internal error")
+			return
+		}
+	}
+
+	if updateAvatar {
+		user, err = api.store.UpdateUserAvatarURL(r.Context(), currentUserID, avatarURL, nowMs)
+		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				writeAPIError(w, ErrCodeUserNotFound, "user not found")
+				return
+			}
+			api.logger.Error("update user avatar failed", "error", err)
+			writeAPIError(w, ErrCodeInternal, "internal error")
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, updateMeResponse{
